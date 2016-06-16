@@ -115,7 +115,7 @@ def create_minibatch(set_number, seq_number, frame_number, annotations, pattern_
 
 
     ### Compute anchor rectangles
-    anchors = create_anchors(pattern_anchors, image.height, image.width)
+    anchors = create_anchors(pattern_anchors, image.size[1], image.size[0])
 
     ### Compute positive and negative examples
     # Compute all IoUs for each (anchor, person)
@@ -124,7 +124,7 @@ def create_minibatch(set_number, seq_number, frame_number, annotations, pattern_
     # Remove anchors that cross the image borders (set their IoUs to 0)
     for i in range(len(anchors)):
         rect = anchors[i]['rect']
-        if rect[0] < 0 or rect[1] < 0 or rect[2] >= image.width or rect[3] >= image.height:
+        if rect[0] < 0 or rect[1] < 0 or rect[2] >= image.size[0] or rect[3] >= image.size[1]:
             IoUs[i] = [0 for p in persons]
 
     for i in range(len(anchors)): # For each anchor, find the biggest IoU with a person
@@ -175,7 +175,7 @@ def create_minibatch(set_number, seq_number, frame_number, annotations, pattern_
 
     ### Create input tensor
     pixels_list = list(image.getdata())
-    pixels_data = np.expand_dims(np.reshape(np.array(pixels_list), [image.height, image.width, 3]), axis = 0)
+    pixels_data = np.expand_dims(np.reshape(np.array(pixels_list), [image.size[1], image.size[0], 3]), axis = 0)
 
     ### Create output tensors for training
     # Create the tensor p, which is used for classification (values are (negative, positive))
@@ -450,7 +450,7 @@ def evaluate_test_results(set_number, seq_number, frame_number, annotations, pat
 
 
     ### Compute anchor rectangles
-    anchors = create_anchors(pattern_anchors, image.height, image.width)
+    anchors = create_anchors(pattern_anchors, image.size[1], image.size[0])
 
     ### For positive guesses, compute coordinates
     positiveAnchors = np.where(clas_results == 1)[0]
