@@ -1,13 +1,28 @@
 # Data extraction
 
-These scripts download and extract the data from the Caltech Dataset.
+## Process
 
-**caltech-pedestrian-dataset-converter** contains Python scripts to download
+The `download_parse.sh` script download & extracts the images and annotations,
+using the following two repositories:
+
+- **caltech-pedestrian-dataset-converter** contains Python scripts to download
 the dataset, and extract annotations. The script for extracting images
 doesn't work (functionnality removed from OpenCV).
 
-**caltech-pedestrian-dataset-extractor** is built with NodeJS and extracts
+- **caltech-pedestrian-dataset-extractor** is built with NodeJS and extracts
 images from the dataset.
+
+Simply run:
+```
+./download_parse.sh
+```
+
+## Requirements
+
+The first repository requires **scipy** to be installed, and the second
+requires both **npm** and **NodeJS** (*v4* at least).
+
+## Making videos
 
 To aggregate images from a sequence into a video, you can use **FFMPEG**:
 ```
