@@ -1,0 +1,6 @@
+[submodule "caltech-dataset/caltech-pedestrian-dataset-extractor"]
+	path = caltech-dataset/caltech-pedestrian-dataset-extractor
+	url = https://github.com/jainanshul/caltech-pedestrian-dataset-extractor.git
+[submodule "caltech-dataset/caltech-pedestrian-dataset-converter"]
+	path = caltech-dataset/caltech-pedestrian-dataset-converter
+	url = https://github.com/mitmul/caltech-pedestrian-dataset-converter.git
