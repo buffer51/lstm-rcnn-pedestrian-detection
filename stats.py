@@ -1,12 +1,13 @@
 #!/usr/bin/env python
 
 import os
+from math import ceil
 
 def statsSeq(folder):
     images = [f for f in os.listdir(folder) if os.path.isfile(folder + '/' + f)]
 
     numImages = len(images)
-    numImages1FPS = numImages / 30
+    numImages1FPS = int(ceil(numImages / 30.0))
 
     return numImages, numImages1FPS
 

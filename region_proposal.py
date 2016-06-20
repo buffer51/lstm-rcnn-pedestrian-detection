@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import glob, random
+import os, glob, random
 from math import sqrt, floor, log, exp
 from PIL import Image, ImageDraw
 import json
@@ -12,10 +12,10 @@ import tensorflow as tf
 
 MINIBATCH_SIZE = 40
 
-TRAIN_START_FRAME = 0
-TRAIN_NUM_FRAMES = 1911
-train_frames = [i for i in range(TRAIN_START_FRAME, TRAIN_START_FRAME+TRAIN_NUM_FRAMES)]
-test_frame = 393
+DATASET = 'caltech-dataset/images'
+TRAIN_SETS = range(0, 5+1)
+TEST_SETS = range(6, 10+1)
+IMAGE_MODULO = 30 # 1 image per second
 
 ### Input ###
 def list_files(set_number, seq_number):
@@ -113,7 +113,6 @@ def create_minibatch(set_number, seq_number, frame_number, annotations, pattern_
     except KeyError as e:
         print('ERROR: Missing key {}'.format(e))
 
-
     ### Compute anchor rectangles
     anchors = create_anchors(pattern_anchors, image.size[1], image.size[0])
 
@@ -128,6 +127,10 @@ def create_minibatch(set_number, seq_number, frame_number, annotations, pattern_
             IoUs[i] = [0 for p in persons]
 
     for i in range(len(anchors)): # For each anchor, find the biggest IoU with a person
+        if len(IoUs[i]) == 0:
+            anchors[i]['positive'] = False
+            continue
+
         maxIoU = max(IoUs[i])
         personIndexMax = IoUs[i].index(maxIoU)
 
@@ -395,6 +398,9 @@ learning_rate = tf.train.exponential_decay(
     0.95,               # Decay rate.
     staircase=True)
 
+epoch = tf.Variable(0, trainable = False, name = 'epoch')
+increment_epoch = epoch.assign_add(1)
+
 # Use simple momentum for the optimization.
 train_step = tf.train.MomentumOptimizer(learning_rate, 0.9).minimize(rpn_loss,
                                                    global_step = global_step)
@@ -402,6 +408,7 @@ train_step = tf.train.MomentumOptimizer(learning_rate, 0.9).minimize(rpn_loss,
 test_step = [tf.argmax(clas_rpn, 1), reg_rpn]
 
 def create_summaries():
+    epoch_summary = tf.scalar_summary('epoch', epoch)
     positive_ratio_summary = tf.scalar_summary('positive_ratio', positive_ratio)
     clas_accuracy_summary = tf.scalar_summary('clas_accuracy', clas_accuracy)
     clas_summary = tf.scalar_summary('clas_loss', clas_loss)
@@ -410,7 +417,7 @@ def create_summaries():
     rpn_summary = tf.scalar_summary('rpn_loss', rpn_loss)
     learning_rate_summary = tf.scalar_summary('learning_rate', learning_rate)
 
-    return [positive_ratio_summary, clas_accuracy_summary, clas_summary, clas_positive_summary, reg_summary, rpn_summary, learning_rate_summary]
+    return [epoch_summary, positive_ratio_summary, clas_accuracy_summary, clas_summary, clas_positive_summary, reg_summary, rpn_summary, learning_rate_summary]
 
 def create_train_summaries():
     with tf.name_scope('train'):
@@ -489,16 +496,38 @@ def evaluate_test_results(set_number, seq_number, frame_number, annotations, pat
 def create_feed_dict(set_number, seq_number, frame_number, annotations, pattern_anchors):
     pixels_data, clas_data, reg_data = create_minibatch(set_number, seq_number, frame_number, annotations, pattern_anchors, display = False)
 
-    print(clas_data)
-    print('')
-
     return {pixels_placeholder: pixels_data,
             clas_placeholder: clas_data,
             reg_placeholder: reg_data}
 
+def create_dataset(sets):
+    dataset = []
+    for set_number in sets:
+        seq_number = 0
+        for seq in sorted([f for f in os.listdir(DATASET + '/set{:02d}'.format(set_number))]):
+            frame_number = 0
+            count = 0
+            for image in sorted([f for f in os.listdir(DATASET + '/set{:02d}'.format(set_number) + '/' + seq)]):
+                if frame_number % IMAGE_MODULO == 0:
+                    dataset.append((set_number, seq_number, frame_number))
+                    count += 1
+                frame_number += 1
+        seq_number += 1
+
+    return dataset
+
+def create_training_testing_set():
+    training_set = create_dataset(TRAIN_SETS)
+    testing_set = create_dataset(TEST_SETS)
+
+    return training_set, testing_set
+
 with tf.Session() as sess:
     # Initialize variables
     tf.initialize_all_variables().run()
+
+    # Create training/testing datasets
+    training_set, testing_set = create_training_testing_set()
 
     # Start populating the filename queue.
     coord = tf.train.Coordinator()
@@ -506,31 +535,19 @@ with tf.Session() as sess:
     train_writer = tf.train.SummaryWriter('log/train', sess.graph, flush_secs = 10)
     test_writer = tf.train.SummaryWriter('log/test', flush_secs = 10)
 
-    for i in range(1000):
-        # results = sess.run([train_step, train_summaries], feed_dict = create_feed_dict(0, 14, train_frames[i%len(train_frames)], annotations, pattern_anchors))
-        results = sess.run([train_step, train_summaries], feed_dict = create_feed_dict(0, 14, train_frames[0], annotations, pattern_anchors))
-        train_writer.add_summary(results[1], global_step = tf.train.global_step(sess, global_step))
-        # print(results[2])
-        # print('')
-        # print(results[3])
-        # print('')
-        # print(results[4])
-        # print('')
-        # print(results[5])
-        # print('')
+    for i in range(10): # Epochs
+        # Do one pass of the whole training_set
+        for frame in training_set:
+            results = sess.run([train_step, train_summaries], feed_dict = create_feed_dict(frame[0], frame[1], frame[2], annotations, pattern_anchors))
+            train_writer.add_summary(results[1], global_step = tf.train.global_step(sess, global_step))
 
-        # k = pattern_anchors.num # Number of anchors
-        # with tf.variable_scope('RPN'):
-        #     with tf.variable_scope('cls', reuse = True):
-        #         print(get_weights([1, 1, 512, 2*k]).eval())
-        #         print(get_biases([2*k]).eval())
-        # print('')
-        # print('')
+        if i != 0 and i % 5 == 0:
+            # Do one pass of the whole testing set
+            for frame in testing_set:
+                [summary_results, clas_results, reg_results] = sess.run([test_summaries] + test_step, feed_dict = create_feed_dict(frame[0], frame[1], frame[2], annotations, pattern_anchors))
+                test_writer.add_summary(summary_results, global_step = tf.train.global_step(sess, global_step))
 
-        if i != 0 and (i+1)%5 == 0:
-            [summary_results, clas_results, reg_results] = sess.run([test_summaries] + test_step, feed_dict = create_feed_dict(0, 0, test_frame, annotations, pattern_anchors))
-            test_writer.add_summary(summary_results, global_step = tf.train.global_step(sess, global_step))
-            evaluate_test_results(0, 13, 200, annotations, pattern_anchors, clas_results, reg_results, display = False)
+        sess.run([increment_epoch])
 
     coord.request_stop()
     coord.join(threads)
