@@ -506,7 +506,7 @@ def create_dataset(sets):
                     dataset.append((set_number, seq_number, frame_number))
                     count += 1
                 frame_number += 1
-        seq_number += 1
+            seq_number += 1
 
     return dataset
 
