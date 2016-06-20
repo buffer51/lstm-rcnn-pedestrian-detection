@@ -398,8 +398,8 @@ learning_rate = tf.train.exponential_decay(
     0.95,               # Decay rate.
     staircase=True)
 
-epoch = tf.Variable(0, trainable = False, name = 'epoch')
-increment_epoch = epoch.assign_add(1)
+epoch = tf.Variable(0.0, trainable = False, name = 'epoch')
+increment_epoch = epoch.assign_add(1.0)
 
 # Use simple momentum for the optimization.
 train_step = tf.train.MomentumOptimizer(learning_rate, 0.9).minimize(rpn_loss,
@@ -421,13 +421,7 @@ def create_summaries():
 
 def create_train_summaries():
     with tf.name_scope('train'):
-        k = pattern_anchors.num # Number of anchors
-
-        with tf.variable_scope('RPN'):
-            with tf.variable_scope('cls', reuse = True):
-
-                weight_summary = tf.image_summary('weight', get_weights([1, 1, 512, 2*k]))
-        return tf.merge_summary(create_summaries())# + [weight_summary])
+        return tf.merge_summary(create_summaries())
 
 def create_test_summaries():
     with tf.name_scope('test'):
