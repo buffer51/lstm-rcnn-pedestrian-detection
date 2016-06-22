@@ -21,7 +21,7 @@ fi
 
 cd caltech-pedestrian-dataset-extractor
 # Download with the caltech-pedestrian-dataset-extractor/download.sh script
-# bash download.sh
+bash download.sh
 
 # Extract images
 npm install
