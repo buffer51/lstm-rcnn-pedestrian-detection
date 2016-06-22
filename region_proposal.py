@@ -12,19 +12,19 @@ import tensorflow as tf
 
 MINIBATCH_SIZE = 40
 
-DATASET = 'caltech-dataset/images'
+DATASET = 'caltech-dataset/dataset'
 TRAIN_SETS = range(0, 5+1)
 TEST_SETS = range(6, 10+1)
 IMAGE_MODULO = 30 # 1 image per second
 
 ### Input ###
 def list_files(set_number, seq_number):
-    files = glob.glob('caltech-dataset/images/set{:02d}/V{:03d}.seq/*.jpg'.format(set_number, seq_number))
+    files = glob.glob(DATASET + '/images/set{:02d}/V{:03d}.seq/*.jpg'.format(set_number, seq_number))
     random.shuffle(files)
     return files
 
 def show_image(set_number, seq_number, frame_number, annotations = None):
-    image = Image.open('caltech-dataset/images/set{:02d}/V{:03d}.seq/{}.jpg'.format(set_number, seq_number, frame_number))
+    image = Image.open(DATASET + '/images/set{:02d}/V{:03d}.seq/{}.jpg'.format(set_number, seq_number, frame_number))
 
     if annotations != None:
         # Read annotations concerning this frame
@@ -71,7 +71,7 @@ def IoU(rect1, rect2):
     return int_area / (W1 * H1 + W2 * H2 - int_area)
 
 def parse_annotations():
-    with open('caltech-dataset/annotations.json') as json_file:
+    with open(DATASET + '/annotations.json') as json_file:
         annotations = json.load(json_file)
 
     return annotations
@@ -97,7 +97,7 @@ def create_anchors(pattern_anchors, image_height, image_width):
     return anchors
 
 def create_minibatch(set_number, seq_number, frame_number, annotations, pattern_anchors, display = False):
-    image = Image.open('caltech-dataset/images/set{:02d}/V{:03d}.seq/{}.jpg'.format(set_number, seq_number, frame_number))
+    image = Image.open(DATASET + '/images/set{:02d}/V{:03d}.seq/{}.jpg'.format(set_number, seq_number, frame_number))
 
     ### Compute person rectangles
     persons = []
@@ -433,7 +433,7 @@ test_summaries = create_test_summaries()
 def evaluate_test_results(set_number, seq_number, frame_number, annotations, pattern_anchors, clas_results, reg_results, display = False):
     # NOTE: argmax should have already been applied to clas_results
 
-    image = Image.open('caltech-dataset/images/set{:02d}/V{:03d}.seq/{}.jpg'.format(set_number, seq_number, frame_number))
+    image = Image.open(DATASET + '/images/set{:02d}/V{:03d}.seq/{}.jpg'.format(set_number, seq_number, frame_number))
 
     ### Compute person rectangles
     persons = []
@@ -498,10 +498,10 @@ def create_dataset(sets):
     dataset = []
     for set_number in sets:
         seq_number = 0
-        for seq in sorted([f for f in os.listdir(DATASET + '/set{:02d}'.format(set_number))]):
+        for seq in sorted([f for f in os.listdir(DATASET + '/images/set{:02d}'.format(set_number))]):
             frame_number = 0
             count = 0
-            for image in sorted([f for f in os.listdir(DATASET + '/set{:02d}'.format(set_number) + '/' + seq)]):
+            for image in sorted([f for f in os.listdir(DATASET + '/images/set{:02d}'.format(set_number) + '/' + seq)]):
                 if frame_number % IMAGE_MODULO == 0:
                     dataset.append((set_number, seq_number, frame_number))
                     count += 1
