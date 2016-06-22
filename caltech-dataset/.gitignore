@@ -1,6 +1,2 @@
-# Original dataset
-data/
-
-# Converted output
-images/
-annotations.json
+# Whole dataset
+dataset
