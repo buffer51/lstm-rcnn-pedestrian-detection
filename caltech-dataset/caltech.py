@@ -42,7 +42,7 @@ class Caltech:
 
         # Define anchors
         self.pattern_anchors = Anchors([50, 75, 100], [1/1.8, 1/2.4, 1/3.0])
-        
+
         print('Generating training & testing sets...')
         self.training = []
         self.testing = []

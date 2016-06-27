@@ -104,21 +104,26 @@ def RPN(X, caltech_dataset, training = False):
 
     return shared_layer, clas_layer, reg_layer
 
-def create_summaries(learning_rate, clas_loss, reg_loss, rpn_loss):
+def create_summaries(learning_rate, clas_loss, reg_loss, rpn_loss, clas_accuracy, clas_positive_percentage, clas_positive_accuracy):
     learning_rate_summary = tf.scalar_summary('learning_rate', learning_rate)
+
     loss_clas_summary = tf.scalar_summary('loss_clas', clas_loss)
     loss_reg_summary = tf.scalar_summary('loss_reg', reg_loss)
     loss_rpn_summary = tf.scalar_summary('loss_rpn', rpn_loss)
 
-    return [learning_rate_summary, loss_clas_summary, loss_reg_summary, loss_rpn_summary]
+    stat_accuracy_summary = tf.scalar_summary('stat_accuracy', clas_accuracy)
+    stat_positive_percentage_summary = tf.scalar_summary('stat_positive_percentage', clas_positive_percentage)
+    stat_positive_accuracy_summary = tf.scalar_summary('stat_positive_accuracy', clas_positive_accuracy)
 
-def create_train_summaries(learning_rate, clas_loss, reg_loss, rpn_loss):
+    return [learning_rate_summary, loss_clas_summary, loss_reg_summary, loss_rpn_summary, stat_accuracy_summary, stat_positive_percentage_summary, stat_positive_accuracy_summary]
+
+def create_train_summaries(learning_rate, clas_loss, reg_loss, rpn_loss, clas_accuracy, clas_positive_percentage, clas_positive_accuracy):
     with tf.name_scope('train'):
-        return tf.merge_summary(create_summaries(learning_rate, clas_loss, reg_loss, rpn_loss))
+        return tf.merge_summary(create_summaries(learning_rate, clas_loss, reg_loss, rpn_loss, clas_accuracy, clas_positive_percentage, clas_positive_accuracy))
 
-def create_test_summaries(learning_rate, clas_loss, reg_loss, rpn_loss):
+def create_test_summaries(learning_rate, clas_loss, reg_loss, rpn_loss, clas_accuracy, clas_positive_percentage, clas_positive_accuracy):
     with tf.name_scope('test'):
-        return tf.merge_summary(create_summaries(learning_rate, clas_loss, reg_loss, rpn_loss))
+        return tf.merge_summary(create_summaries(learning_rate, clas_loss, reg_loss, rpn_loss, clas_accuracy, clas_positive_percentage, clas_positive_accuracy))
 
 def trainer(caltech_dataset, input_placeholder, clas_placeholder, reg_placeholder):
     # Shared CNN
@@ -150,6 +155,15 @@ def trainer(caltech_dataset, input_placeholder, clas_placeholder, reg_placeholde
 
     rpn_loss = tf.add(clas_loss, reg_loss)
 
+    # Diagnostic statistics
+    clas_answer = tf.argmax(clas_truth, 1)
+    clas_guess = tf.argmax(clas_rpn, 1)
+    clas_comparison = tf.cast(tf.equal(clas_answer, clas_guess), tf.float32)
+
+    clas_accuracy = tf.div(tf.reduce_sum(tf.mul(clas_comparison, clas_examples)), tf.reduce_sum(clas_examples))
+    clas_positive_percentage = tf.div(tf.reduce_sum(clas_positive_examples), tf.reduce_sum(clas_examples))
+    clas_positive_accuracy = tf.div(tf.reduce_sum(tf.mul(clas_comparison, clas_positive_examples)), tf.reduce_sum(clas_positive_examples))
+
     global_step = tf.Variable(0, trainable = False, name = 'global_step')
     learning_rate = tf.train.exponential_decay(
         0.01,               # Base learning rate.
@@ -165,8 +179,8 @@ def trainer(caltech_dataset, input_placeholder, clas_placeholder, reg_placeholde
     test_step = rpn_loss
 
     # Creating summaries
-    train_summaries = create_train_summaries(learning_rate, clas_loss, reg_loss, rpn_loss)
-    test_summaries = create_test_summaries(learning_rate, clas_loss, reg_loss, rpn_loss)
+    train_summaries = create_train_summaries(learning_rate, clas_loss, reg_loss, rpn_loss, clas_accuracy, clas_positive_percentage, clas_positive_accuracy)
+    test_summaries = create_test_summaries(learning_rate, clas_loss, reg_loss, rpn_loss, clas_accuracy, clas_positive_percentage, clas_positive_accuracy)
 
     return global_step, learning_rate, train_step, train_summaries, test_step, test_summaries
 
