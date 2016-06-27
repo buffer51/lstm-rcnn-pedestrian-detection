@@ -1,0 +1,148 @@
+#!/usr/bin/env python
+
+import os, glob, random
+from math import ceil, sqrt
+
+import numpy as np
+
+import prepare
+
+class Anchors:
+    def __init__(self, scales, width_to_height_ratios):
+        self.num = len(scales) * len(width_to_height_ratios)
+
+        heights = []
+        widths = []
+        for s in scales:
+            s = float(s)
+            # Desired scales are the square of what is passed to the function
+            s = pow(s, 2)
+            for r in width_to_height_ratios:
+                r = float(r)
+                h = sqrt(s/r)
+                w = r * h
+                heights.append(h)
+                widths.append(w)
+
+        self.height_list = heights
+        self.width_list = widths
+        # self.heights = tf.constant(heights)
+        # self.widths = tf.constant(widths)
+
+class Caltech:
+    FRAME_MODULO = 30 # Modulo for selecting frames from sequences
+
+    # Minibatch settings
+    FRAMES_PER_MINIBATCH = 1 # Number of frames passed in each minibatch
+    ANCHORS_PER_FRAME = 256 # Number of total anchors (positive + negative) kept in each frame
+    MINIBATCH_SIZE = FRAMES_PER_MINIBATCH * ANCHORS_PER_FRAME
+
+    def __init__(self, dataset_location = 'caltech-dataset/dataset'):
+        self.dataset_location = dataset_location
+
+        print('Generating training & testing sets...')
+        self.training = []
+        self.testing = []
+        for set_number in range(10 + 1):
+            if set_number <= 5:
+                self.training += self.parse_set(set_number)
+            else:
+                self.testing += self.parse_set(set_number)
+
+        print('{} frames in training set'.format(len(self.training)))
+        print('{} frames in testing set'.format(len(self.testing)))
+        print('')
+
+        print('Checking training & testing sets...')
+        if (not self.check_dataset(self.training)) or (not self.check_dataset(self.testing)):
+            print('Dataset not prepared! Preparing dataset...')
+            self.prepare()
+
+            if (not self.check_dataset(self.training)) or (not self.check_dataset(self.testing)):
+                print('ERROR: Dataset still not prepared!')
+                exit(1)
+        print('')
+
+        # Define anchors
+        self.pattern_anchors = Anchors([50, 75, 100], [1/1.8, 1/2.4, 1/3.0])
+
+    ### Dataset generation
+
+    def parse_sequence(self, set_number, seq_number):
+        folder = self.dataset_location + '/images/set{:02d}/V{:03d}.seq'.format(set_number, seq_number)
+
+        num_total_frames = len(glob.glob(folder + '/*.jpg'))
+        num_frames = int(ceil(float(num_total_frames) / float(Caltech.FRAME_MODULO)))
+
+        return [(set_number, seq_number, Caltech.FRAME_MODULO * i) for i in range(num_frames)]
+
+    def parse_set(self, set_number):
+        folder = self.dataset_location + '/images/set{:02d}'.format(set_number)
+        num_sequences = len([f for f in os.listdir(folder) if os.path.isdir(folder + '/' + f)])
+
+        tuples = []
+        for seq_number in range(num_sequences):
+            tuples += self.parse_sequence(set_number, seq_number)
+
+        return tuples
+
+    ### Dataset checking
+
+    def check_dataset(self, dataset):
+        if not os.path.isdir(self.dataset_location + '/prepared'):
+            return False
+
+        # Shallow check
+        return True
+
+    def prepare(self):
+        prepare.prepare_dataset(self)
+
+    ### Dataset usage
+
+    def init(self):
+        self.epoch = 0
+        self.minibatch = 0
+        print('Epoch: {}'.format(self.epoch))
+
+        random.shuffle(self.training)
+
+        self.num_minibatches = int(ceil(float(len(self.training)) / float(Caltech.FRAMES_PER_MINIBATCH)))
+
+        # Read first frame to configure input & output sizes
+        data = np.load(self.dataset_location + '/prepared/set{:02d}/V{:03d}.seq/{}.npz'.format(0, 0, 0))
+
+        input_data = data['input']
+        self.input_height = input_data.shape[1]
+        self.input_width = input_data.shape[2]
+
+        clas_data = data['clas']
+        self.output_height = clas_data.shape[1]
+        self.output_width = clas_data.shape[2]
+
+    def get_minibatch(self, input_placeholder, clas_placeholder, reg_placeholder):
+        self.minibatch += 1
+
+        if Caltech.FRAMES_PER_MINIBATCH != 1:
+            print('ERROR: Not implemented')
+            exit(1)
+
+        data = np.load(self.dataset_location + '/prepared/set{:02d}/V{:03d}.seq/{}.npz'.format(*self.training[self.minibatch]))
+
+        if self.minibatch == self.num_minibatches:
+            self.minibatch = 0
+            self.epoch += 1
+            print('Epoch: {}'.format(self.epoch))
+
+            random.shuffle(self.training)
+
+        return {
+            input_placeholder: data['input'],
+            clas_placeholder: data['clas'],
+            reg_placeholder: data['reg']
+        }
+
+if __name__ == '__main__':
+    # This will automatically prepare the dataset
+    caltech_dataset = Caltech('dataset')
+    caltech_dataset.prepare()
