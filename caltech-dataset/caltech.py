@@ -40,6 +40,9 @@ class Caltech:
     def __init__(self, dataset_location = 'caltech-dataset/dataset'):
         self.dataset_location = dataset_location
 
+        # Define anchors
+        self.pattern_anchors = Anchors([50, 75, 100], [1/1.8, 1/2.4, 1/3.0])
+        
         print('Generating training & testing sets...')
         self.training = []
         self.testing = []
@@ -62,9 +65,6 @@ class Caltech:
                 print('ERROR: Dataset still not prepared!')
                 exit(1)
         print('')
-
-        # Define anchors
-        self.pattern_anchors = Anchors([50, 75, 100], [1/1.8, 1/2.4, 1/3.0])
 
     ### Dataset generation
 
