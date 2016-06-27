@@ -137,8 +137,10 @@ class Caltech:
             clas_negative = random.sample(clas_negative, Caltech.ANCHORS_PER_FRAME - len(clas_positive))
 
         clas_data = np.zeros(reg_data.shape[:2] + (2,), dtype = np.float32)
-        clas_data[0][clas_negative] = [1.0, 0.0]
-        clas_data[0][clas_positive] = [0.0, 1.0]
+        if len(clas_negative) > 0:
+            clas_data[0][clas_negative] = [1.0, 0.0]
+        if len(clas_positive) > 0:
+            clas_data[0][clas_positive] = [0.0, 1.0]
 
         if self.minibatch == self.num_minibatches:
             self.minibatch = 0
