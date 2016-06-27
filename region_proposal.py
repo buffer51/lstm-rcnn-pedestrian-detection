@@ -153,8 +153,8 @@ def trainer(caltech_dataset, input_placeholder, clas_placeholder, reg_placeholde
     global_step = tf.Variable(0, trainable = False, name = 'global_step')
     learning_rate = tf.train.exponential_decay(
         0.01,               # Base learning rate.
-        global_step * Caltech.MINIBATCH_SIZE,  # Current index into the dataset.
-        10000,              # Decay step.
+        global_step,        # Current index into the dataset.
+        1000,              # Decay step.
         0.95,               # Decay rate.
         staircase=True)
 
@@ -191,7 +191,7 @@ if __name__ == '__main__':
         train_writer = tf.train.SummaryWriter('log/train', sess.graph, flush_secs = 10)
         test_writer = tf.train.SummaryWriter('log/test', flush_secs = 10)
 
-        while caltech_dataset.epoch < 2:
+        while caltech_dataset.epoch < 5:
             # Do one pass of the whole training_set
             results = sess.run([train_step, train_summaries], feed_dict = caltech_dataset.get_minibatch(input_placeholder, clas_placeholder, reg_placeholder))
             train_writer.add_summary(results[1], global_step = tf.train.global_step(sess, global_step))
