@@ -109,16 +109,12 @@ class Caltech:
 
         self.num_minibatches = int(ceil(float(len(self.training)) / float(Caltech.FRAMES_PER_MINIBATCH)))
 
-        # Read first frame to configure input & output sizes
+        # Read first frame to configure input size
         data = np.load(self.dataset_location + '/prepared/set{:02d}/V{:03d}.seq/{}.npz'.format(0, 0, 0))
 
         input_data = data['input']
         self.input_height = input_data.shape[1]
         self.input_width = input_data.shape[2]
-
-        clas_data = data['clas']
-        self.output_height = clas_data.shape[1]
-        self.output_width = clas_data.shape[2]
 
     def get_minibatch(self, input_placeholder, clas_placeholder, reg_placeholder):
         self.minibatch += 1
@@ -129,6 +125,21 @@ class Caltech:
 
         data = np.load(self.dataset_location + '/prepared/set{:02d}/V{:03d}.seq/{}.npz'.format(*self.training[self.minibatch]))
 
+        input_data = data['input']
+        clas_positive = data['clas_positive']
+        clas_negative = data['clas_negative']
+        reg_data = data['reg']
+
+        if len(clas_positive) > Caltech.ANCHORS_PER_FRAME / 2:
+            clas_positive = random.sample(clas_positive, Caltech.ANCHORS_PER_FRAME / 2)
+
+        if len(clas_negative) > Caltech.ANCHORS_PER_FRAME - len(clas_positive):
+            clas_negative = random.sample(clas_negative, Caltech.ANCHORS_PER_FRAME - len(clas_positive))
+
+        clas_data = np.zeros(reg_data.shape[:2] + (2,), dtype = np.float32)
+        clas_data[0][clas_negative] = [1.0, 0.0]
+        clas_data[0][clas_positive] = [0.0, 1.0]
+
         if self.minibatch == self.num_minibatches:
             self.minibatch = 0
             self.epoch += 1
@@ -137,9 +148,9 @@ class Caltech:
             random.shuffle(self.training)
 
         return {
-            input_placeholder: data['input'],
-            clas_placeholder: data['clas'],
-            reg_placeholder: data['reg']
+            input_placeholder: input_data,
+            clas_placeholder: clas_data,
+            reg_placeholder: reg_data
         }
 
 if __name__ == '__main__':

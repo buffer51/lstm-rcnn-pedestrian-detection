@@ -126,15 +126,16 @@ def create_labels_for_frame(objects, pattern_anchors, image_height, image_width)
                 anchors[i]['positive'] = False
 
     ### Convert anchors to labels for regression & classification
-    clas_data = np.zeros((1, num_anchors_vertically, num_anchors_horizontally, pattern_anchors.num, 2), dtype = np.bool_) # [?, height, width, # of anchors, 2 classes]
-    reg_data = np.zeros((1, num_anchors_vertically, num_anchors_horizontally, pattern_anchors.num, 4), dtype = np.float32) # [?, height, width, # of anchors, 4 coordinates]
+    clas_positive = []
+    clas_negative = []
+    reg_data = np.zeros((1, num_anchors_vertically*num_anchors_horizontally*pattern_anchors.num, 4), dtype = np.float32) # [?, height, width, # of anchors, 4 coordinates]
 
     for i in range(len(anchors)):
         if anchors[i]['positive'] != None:
             # Retrieve 3-D position of the anchors (in height, width, # of anchors)
             index = i / pattern_anchors.num
             if anchors[i]['positive']:
-                clas_data[0, index%num_anchors_vertically, index/num_anchors_vertically, i%pattern_anchors.num, 1] = True
+                clas_positive.append(i)
 
                 # Regression values
                 xAnchor = anchors[i]['rect'][0]
@@ -147,14 +148,14 @@ def create_labels_for_frame(objects, pattern_anchors, image_height, image_width)
                 wPerson = anchors[i]['person'][2] - xPerson
                 hPerson = anchors[i]['person'][3] - yPerson
 
-                reg_data[0, index%num_anchors_vertically, index/num_anchors_vertically, i%pattern_anchors.num, 0] = (xPerson - xAnchor) / wAnchor # tx
-                reg_data[0, index%num_anchors_vertically, index/num_anchors_vertically, i%pattern_anchors.num, 1] = (yPerson - yAnchor) / hAnchor # ty
-                reg_data[0, index%num_anchors_vertically, index/num_anchors_vertically, i%pattern_anchors.num, 2] = log(wPerson / wAnchor) # tw
-                reg_data[0, index%num_anchors_vertically, index/num_anchors_vertically, i%pattern_anchors.num, 3] = log(hPerson / hAnchor) # th
+                reg_data[0, i, 0] = (xPerson - xAnchor) / wAnchor # tx
+                reg_data[0, i, 1] = (yPerson - yAnchor) / hAnchor # ty
+                reg_data[0, i, 2] = log(wPerson / wAnchor) # tw
+                reg_data[0, i, 3] = log(hPerson / hAnchor) # th
             else:
-                clas_data[0, index%num_anchors_vertically, index/num_anchors_vertically, i%pattern_anchors.num, 0] = True
+                clas_negative.append(i)
 
-    return clas_data, reg_data
+    return clas_positive, clas_negative, reg_data
 
 def create_input_and_labels_for_frame(dataset_location, set_number, seq_number, frame_number, annotations, pattern_anchors):
     if os.path.isfile(dataset_location + '/prepared/set{:02d}/V{:03d}.seq/{}.npz'.format(set_number, seq_number, frame_number)):
@@ -172,13 +173,13 @@ def create_input_and_labels_for_frame(dataset_location, set_number, seq_number, 
         objects = None # Simply no objects for that frame
 
     # Create labels
-    clas_data, reg_data = create_labels_for_frame(objects, pattern_anchors, image.size[1], image.size[0])
+    clas_positive, clas_negative, reg_data = create_labels_for_frame(objects, pattern_anchors, image.size[1], image.size[0])
 
     # Save everything
     if not os.path.isdir(dataset_location + '/prepared/set{:02d}/V{:03d}.seq'.format(set_number, seq_number)):
         os.makedirs(dataset_location + '/prepared/set{:02d}/V{:03d}.seq'.format(set_number, seq_number))
 
-    np.savez(dataset_location + '/prepared/set{:02d}/V{:03d}.seq/{}.npz'.format(set_number, seq_number, frame_number), input = input_data, clas = clas_data, reg = reg_data)
+    np.savez(dataset_location + '/prepared/set{:02d}/V{:03d}.seq/{}.npz'.format(set_number, seq_number, frame_number), input = input_data, clas_positive = clas_positive, clas_negative = clas_negative, reg = reg_data)
 
 def prepare_dataset(caltech_dataset):
     # Load annotations

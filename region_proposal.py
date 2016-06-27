@@ -191,8 +191,8 @@ if __name__ == '__main__':
 
     ### Declare input & output ###
     input_placeholder = tf.placeholder(tf.uint8, [None, caltech_dataset.input_height, caltech_dataset.input_width, 3]) # 640x480 images, RGB (depth 3)
-    clas_placeholder = tf.placeholder(tf.bool, [None, caltech_dataset.output_height, caltech_dataset.output_width, caltech_dataset.pattern_anchors.num, 2])
-    reg_placeholder = tf.placeholder(tf.float32, [None, caltech_dataset.output_height, caltech_dataset.output_width, caltech_dataset.pattern_anchors.num, 4])
+    clas_placeholder = tf.placeholder(tf.float32, [None, None, 2])
+    reg_placeholder = tf.placeholder(tf.float32, [None, None, 4])
 
     ### Creating the trainer ###
     global_step, learning_rate, train_step, train_summaries, test_step, test_summaries = trainer(caltech_dataset, input_placeholder, clas_placeholder, reg_placeholder)
