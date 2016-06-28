@@ -34,7 +34,7 @@ class Caltech:
 
     # Minibatch settings
     FRAMES_PER_MINIBATCH = 1 # Number of frames passed in each minibatch
-    ANCHORS_PER_FRAME = 50 # Number of total anchors (positive + negative) kept in each frame
+    ANCHORS_PER_FRAME = 256 # Number of total anchors (positive + negative) kept in each frame
     MINIBATCH_SIZE = FRAMES_PER_MINIBATCH * ANCHORS_PER_FRAME
 
     def __init__(self, dataset_location = 'caltech-dataset/dataset'):
