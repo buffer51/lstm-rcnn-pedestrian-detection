@@ -34,7 +34,7 @@ class Caltech:
 
     # Minibatch settings
     FRAMES_PER_MINIBATCH = 1 # Number of frames passed in each minibatch
-    ANCHORS_PER_FRAME = 256 # Number of total anchors (positive + negative) kept in each frame
+    ANCHORS_PER_FRAME = 50 # Number of total anchors (positive + negative) kept in each frame
     MINIBATCH_SIZE = FRAMES_PER_MINIBATCH * ANCHORS_PER_FRAME
 
     def __init__(self, dataset_location = 'caltech-dataset/dataset'):
@@ -117,8 +117,6 @@ class Caltech:
         self.input_width = input_data.shape[2]
 
     def get_minibatch(self, input_placeholder, clas_placeholder, reg_placeholder):
-        self.minibatch += 1
-
         if Caltech.FRAMES_PER_MINIBATCH != 1:
             print('ERROR: Not implemented')
             exit(1)
@@ -142,6 +140,7 @@ class Caltech:
         if len(clas_positive) > 0:
             clas_data[0][clas_positive] = [0.0, 1.0]
 
+        self.minibatch += 1
         if self.minibatch == self.num_minibatches:
             self.minibatch = 0
             self.epoch += 1
