@@ -37,6 +37,9 @@ class Caltech:
     ANCHORS_PER_FRAME = 256 # Number of total anchors (positive + negative) kept in each frame
     MINIBATCH_SIZE = FRAMES_PER_MINIBATCH * ANCHORS_PER_FRAME
 
+    # Balancing settings
+    MINIMUM_POSITIVE_RATIO = 0.2
+
     def __init__(self, dataset_location = 'caltech-dataset/dataset'):
         self.dataset_location = dataset_location
 
@@ -121,10 +124,21 @@ class Caltech:
             print('ERROR: Not implemented')
             exit(1)
 
-        data = np.load(self.dataset_location + '/prepared/set{:02d}/V{:03d}.seq/{}.npz'.format(*self.training[self.minibatch]))
+        clas_positive = []
+        while len(clas_positive) < int(Caltech.MINIMUM_POSITIVE_RATIO * Caltech.ANCHORS_PER_FRAME):
+            data = np.load(self.dataset_location + '/prepared/set{:02d}/V{:03d}.seq/{}.npz'.format(*self.training[self.minibatch]))
+
+            clas_positive = data['clas_positive']
+
+            self.minibatch += 1
+            if self.minibatch == self.num_minibatches:
+                self.minibatch = 0
+                self.epoch += 1
+                print('Epoch: {}'.format(self.epoch))
+
+                random.shuffle(self.training)
 
         input_data = data['input']
-        clas_positive = data['clas_positive']
         clas_negative = data['clas_negative']
         reg_data = data['reg']
 
@@ -139,14 +153,6 @@ class Caltech:
             clas_data[0][clas_negative] = [1.0, 0.0]
         if len(clas_positive) > 0:
             clas_data[0][clas_positive] = [0.0, 1.0]
-
-        self.minibatch += 1
-        if self.minibatch == self.num_minibatches:
-            self.minibatch = 0
-            self.epoch += 1
-            print('Epoch: {}'.format(self.epoch))
-
-            random.shuffle(self.training)
 
         return {
             input_placeholder: input_data,
