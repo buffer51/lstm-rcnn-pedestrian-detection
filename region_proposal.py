@@ -92,13 +92,13 @@ def RPN(X, caltech_dataset, training = False):
 
         # Classification layer: conv1-2*k
         with tf.variable_scope('cls'): # Classification layer, 1x1 depth 2*k
-            clas_layer = tf.nn.relu(tf.nn.conv2d(X, get_weights([1, 1, 512, 2*k]), strides = [1, 1, 1, 1], padding = 'SAME')
+            clas_layer = tf.nn.relu(tf.nn.conv2d(shared_layer, get_weights([1, 1, 512, 2*k]), strides = [1, 1, 1, 1], padding = 'SAME')
                             + get_biases([2*k]))
             clas_layer = tf.reshape(clas_layer, [-1, 2])
 
         # Regression layer: conv1-4*k
         with tf.variable_scope('reg'): # Regression layer, 1x1 depth 4*k
-            reg_layer = tf.nn.relu(tf.nn.conv2d(X, get_weights([1, 1, 512, 4*k]), strides = [1, 1, 1, 1], padding = 'SAME')
+            reg_layer = tf.nn.relu(tf.nn.conv2d(shared_layer, get_weights([1, 1, 512, 4*k]), strides = [1, 1, 1, 1], padding = 'SAME')
                             + get_biases([4*k]))
             reg_layer = tf.reshape(reg_layer, [-1, 4])
 
@@ -168,7 +168,7 @@ def trainer(caltech_dataset, input_placeholder, clas_placeholder, reg_placeholde
     learning_rate = tf.train.exponential_decay(
         0.01,               # Base learning rate.
         global_step,        # Current index into the dataset.
-        1000,              # Decay step.
+        1000,               # Decay step.
         0.95,               # Decay rate.
         staircase=True)
 
