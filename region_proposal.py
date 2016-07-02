@@ -197,9 +197,18 @@ if __name__ == '__main__':
     ### Creating the trainer ###
     global_step, learning_rate, train_step, train_summaries, test_step, test_summaries = trainer(caltech_dataset, input_placeholder, clas_placeholder, reg_placeholder)
 
+    ### Create a saver/loader ###
+    saver = tf.train.Saver()
+
     with tf.Session() as sess:
-        # Initialize variables
-        tf.initialize_all_variables().run()
+        restore_path = None
+        if restore_path:
+            # Restore variables from disk.
+            saver.restore(sess, restore_path)
+            print('Model restored from: {}.'.format(restore_path))
+        else:
+            # Initialize variables
+            tf.initialize_all_variables().run()
 
         # Start summary writers
         train_writer = tf.train.SummaryWriter('log/train', sess.graph, flush_secs = 10)
@@ -217,3 +226,7 @@ if __name__ == '__main__':
             #         test_writer.add_summary(summary_results, global_step = tf.train.global_step(sess, global_step))
             #
             # sess.run([increment_epoch])
+
+        # Save the model to disk
+        save_path = saver.save(sess, '/tmp/model.ckpt')
+        print('Model saved in file: {}'.format(save_path))
