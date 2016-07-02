@@ -143,7 +143,7 @@ def trainer(caltech_dataset, input_placeholder, clas_placeholder, reg_placeholde
     # Declare loss functions
     clas_loss = tf.nn.softmax_cross_entropy_with_logits(clas_rpn, clas_truth)
     clas_loss = tf.reduce_sum(tf.mul(clas_loss, clas_examples))
-    clas_loss = tf.div(clas_loss, Caltech.MINIBATCH_SIZE) # Normalization
+    clas_loss = tf.div(clas_loss, tf.reduce_sum(clas_examples)) # Normalization
 
     reg_loss = tf.sub(reg_rpn, reg_truth) # This is not actually the Smooth L1 as defined in http://www.cv-foundation.org/openaccess/content_iccv_2015/papers/Girshick_Fast_R-CNN_ICCV_2015_paper.pdf
     reg_loss = tf.square(reg_loss)
@@ -215,17 +215,14 @@ if __name__ == '__main__':
         test_writer = tf.train.SummaryWriter('log/test', flush_secs = 10)
 
         while caltech_dataset.epoch < 5:
-            # Do one pass of the whole training_set
-            results = sess.run([train_step, train_summaries], feed_dict = caltech_dataset.get_minibatch(input_placeholder, clas_placeholder, reg_placeholder))
+            results = sess.run([train_step, train_summaries], feed_dict = caltech_dataset.get_train_minibatch(input_placeholder, clas_placeholder, reg_placeholder))
             train_writer.add_summary(results[1], global_step = tf.train.global_step(sess, global_step))
 
-            # if caltech_dataset.epoch != 0 and caltech_dataset.epoch % 5 == 0:
-            #     # Do one pass of the whole testing set
-            #     for frame in testing_set:
-            #         [summary_results, clas_results, reg_results] = sess.run([test_summaries] + test_step, feed_dict = create_feed_dict(frame[0], frame[1], frame[2], annotations, pattern_anchors))
-            #         test_writer.add_summary(summary_results, global_step = tf.train.global_step(sess, global_step))
-            #
-            # sess.run([increment_epoch])
+            if caltech_dataset.train_minibatch == 0 and caltech_dataset.epoch != 0 and caltech_dataset.epoch % 5 == 0:
+                # Do one pass of the whole testing set
+                while caltech_dataset.is_test_minibatch_left():
+                    results = sess.run([test_step, test_summaries], feed_dict = caltech_dataset.get_test_minibatch(input_placeholder, clas_placeholder, reg_placeholder))
+                    test_writer.add_summary(results[1], global_step = tf.train.global_step(sess, global_step))
 
         # Save the model to disk
         save_path = saver.save(sess, '/tmp/model.ckpt')

@@ -33,9 +33,13 @@ class Caltech:
     FRAME_MODULO = 30 # Modulo for selecting frames from sequences
 
     # Minibatch settings
-    FRAMES_PER_MINIBATCH = 1 # Number of frames passed in each minibatch
-    ANCHORS_PER_FRAME = 256 # Number of total anchors (positive + negative) kept in each frame
-    MINIBATCH_SIZE = FRAMES_PER_MINIBATCH * ANCHORS_PER_FRAME
+    FRAMES_PER_TRAIN_MINIBATCH = 1 # Number of frames passed in each train train_minibatch
+    ANCHORS_PER_TRAIN_FRAME = 256 # Number of total anchors (positive + negative) kept in each frame (for training)
+    TRAIN_MINIBATCH_SIZE = FRAMES_PER_TRAIN_MINIBATCH * ANCHORS_PER_TRAIN_FRAME
+
+    FRAMES_PER_TEST_MINIBATCH = 1 # Number of frames passed in each test train_minibatch
+    ANCHORS_PER_TEST_FRAME = ANCHORS_PER_TRAIN_FRAME # Number of total anchors (positive + negative) kept in each frame (for testing)
+    TEST_MINIBATCH_SIZE = FRAMES_PER_TEST_MINIBATCH * ANCHORS_PER_TEST_FRAME
 
     # Balancing settings
     MINIMUM_POSITIVE_RATIO = 0.4
@@ -105,12 +109,14 @@ class Caltech:
 
     def init(self):
         self.epoch = 0
-        self.minibatch = 0
+        self.train_minibatch = 0
+        self.test_minibatch = 0
         print('Epoch: {}'.format(self.epoch))
 
         random.shuffle(self.training)
 
-        self.num_minibatches = int(ceil(float(len(self.training)) / float(Caltech.FRAMES_PER_MINIBATCH)))
+        self.num_train_minibatches = int(ceil(float(len(self.training)) / float(Caltech.FRAMES_PER_TRAIN_MINIBATCH)))
+        self.num_test_minibatches = int(ceil(float(len(self.testing)) / float(Caltech.FRAMES_PER_TEST_MINIBATCH)))
 
         # Read first frame to configure input size
         data = np.load(self.dataset_location + '/prepared/set{:02d}/V{:03d}.seq/{}.npz'.format(0, 0, 0))
@@ -119,20 +125,20 @@ class Caltech:
         self.input_height = input_data.shape[1]
         self.input_width = input_data.shape[2]
 
-    def get_minibatch(self, input_placeholder, clas_placeholder, reg_placeholder):
-        if Caltech.FRAMES_PER_MINIBATCH != 1:
+    def get_train_minibatch(self, input_placeholder, clas_placeholder, reg_placeholder):
+        if Caltech.FRAMES_PER_TRAIN_MINIBATCH != 1:
             print('ERROR: Not implemented')
             exit(1)
 
         clas_positive = []
-        while len(clas_positive) < int(Caltech.MINIMUM_POSITIVE_RATIO * Caltech.ANCHORS_PER_FRAME):
-            data = np.load(self.dataset_location + '/prepared/set{:02d}/V{:03d}.seq/{}.npz'.format(*self.training[self.minibatch]))
+        while len(clas_positive) < int(Caltech.MINIMUM_POSITIVE_RATIO * Caltech.ANCHORS_PER_TRAIN_FRAME):
+            data = np.load(self.dataset_location + '/prepared/set{:02d}/V{:03d}.seq/{}.npz'.format(*self.training[self.train_minibatch]))
 
             clas_positive = data['clas_positive']
 
-            self.minibatch += 1
-            if self.minibatch == self.num_minibatches:
-                self.minibatch = 0
+            self.train_minibatch += 1
+            if self.train_minibatch == self.num_train_minibatches:
+                self.train_minibatch = 0
                 self.epoch += 1
                 print('Epoch: {}'.format(self.epoch))
 
@@ -142,11 +148,56 @@ class Caltech:
         clas_negative = data['clas_negative']
         reg_data = data['reg']
 
-        if len(clas_positive) > Caltech.ANCHORS_PER_FRAME / 2:
-            clas_positive = random.sample(clas_positive, Caltech.ANCHORS_PER_FRAME / 2)
+        if len(clas_positive) > Caltech.ANCHORS_PER_TRAIN_FRAME / 2:
+            clas_positive = random.sample(clas_positive, Caltech.ANCHORS_PER_TRAIN_FRAME / 2)
 
-        if len(clas_negative) > Caltech.ANCHORS_PER_FRAME - len(clas_positive):
-            clas_negative = random.sample(clas_negative, Caltech.ANCHORS_PER_FRAME - len(clas_positive))
+        if len(clas_negative) > Caltech.ANCHORS_PER_TRAIN_FRAME - len(clas_positive):
+            clas_negative = random.sample(clas_negative, Caltech.ANCHORS_PER_TRAIN_FRAME - len(clas_positive))
+
+        clas_data = np.zeros(reg_data.shape[:2] + (2,), dtype = np.float32)
+        if len(clas_negative) > 0:
+            clas_data[0][clas_negative] = [1.0, 0.0]
+        if len(clas_positive) > 0:
+            clas_data[0][clas_positive] = [0.0, 1.0]
+
+        return {
+            input_placeholder: input_data,
+            clas_placeholder: clas_data,
+            reg_placeholder: reg_data
+        }
+
+    def is_test_minibatch_left(self):
+        if self.test_minibatch == self.num_test_minibatches:
+            self.test_minibatch = 0
+            return False
+
+        return True
+
+    def get_test_minibatch(self, input_placeholder, clas_placeholder, reg_placeholder):
+        if Caltech.FRAMES_PER_TEST_MINIBATCH != 1:
+            print('ERROR: Not implemented')
+            exit(1)
+
+        clas_positive = []
+        while len(clas_positive) < int(Caltech.MINIMUM_POSITIVE_RATIO * Caltech.ANCHORS_PER_TEST_FRAME):
+            data = np.load(self.dataset_location + '/prepared/set{:02d}/V{:03d}.seq/{}.npz'.format(*self.testing[self.test_minibatch]))
+
+            clas_positive = data['clas_positive']
+
+            self.test_minibatch += 1
+            if self.test_minibatch == self.num_test_minibatches:
+                print('ERROR: No more testing minibatch (unforeseen)')
+                exit(1)
+
+        input_data = data['input']
+        clas_negative = data['clas_negative']
+        reg_data = data['reg']
+
+        if len(clas_positive) > Caltech.ANCHORS_PER_TEST_FRAME / 2:
+            clas_positive = random.sample(clas_positive, Caltech.ANCHORS_PER_TEST_FRAME / 2)
+
+        if len(clas_negative) > Caltech.ANCHORS_PER_TEST_FRAME - len(clas_positive):
+            clas_negative = random.sample(clas_negative, Caltech.ANCHORS_PER_TEST_FRAME - len(clas_positive))
 
         clas_data = np.zeros(reg_data.shape[:2] + (2,), dtype = np.float32)
         if len(clas_negative) > 0:
