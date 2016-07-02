@@ -38,7 +38,7 @@ class Caltech:
     MINIBATCH_SIZE = FRAMES_PER_MINIBATCH * ANCHORS_PER_FRAME
 
     # Balancing settings
-    MINIMUM_POSITIVE_RATIO = 0.2
+    MINIMUM_POSITIVE_RATIO = 0.4
 
     def __init__(self, dataset_location = 'caltech-dataset/dataset'):
         self.dataset_location = dataset_location
