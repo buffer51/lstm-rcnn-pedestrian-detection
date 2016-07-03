@@ -92,14 +92,14 @@ def RPN(X, caltech_dataset, training = False):
 
         # Classification layer: conv1-2*k
         with tf.variable_scope('cls'): # Classification layer, 1x1 depth 2*k
-            clas_layer = tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(shared_layer, get_weights([1, 1, 512, 2*k]), strides = [1, 1, 1, 1], padding = 'SAME'),
-                            get_biases([2*k])))
+            clas_layer = tf.nn.bias_add(tf.nn.conv2d(shared_layer, get_weights([1, 1, 512, 2*k]), strides = [1, 1, 1, 1], padding = 'SAME'),
+                            get_biases([2*k]))
             clas_layer = tf.reshape(clas_layer, [-1, 2])
 
         # Regression layer: conv1-4*k
         with tf.variable_scope('reg'): # Regression layer, 1x1 depth 4*k
-            reg_layer = tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(shared_layer, get_weights([1, 1, 512, 4*k]), strides = [1, 1, 1, 1], padding = 'SAME'),
-                            get_biases([4*k])))
+            reg_layer = tf.nn.bias_add(tf.nn.conv2d(shared_layer, get_weights([1, 1, 512, 4*k]), strides = [1, 1, 1, 1], padding = 'SAME'),
+                            get_biases([4*k]))
             reg_layer = tf.reshape(reg_layer, [-1, 4])
 
     return shared_layer, clas_layer, reg_layer
