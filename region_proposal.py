@@ -266,7 +266,7 @@ if __name__ == '__main__':
         test_writer = tf.train.SummaryWriter('log/test', flush_secs = 10)
 
         last_epoch = 0
-        while caltech_dataset.epoch < 5:
+        while caltech_dataset.epoch < 15:
             results = sess.run([train_step, train_summaries], feed_dict = caltech_dataset.get_train_minibatch(input_placeholder, clas_placeholder, reg_placeholder))
             train_writer.add_summary(results[1], global_step = tf.train.global_step(sess, global_step))
 
