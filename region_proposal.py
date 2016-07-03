@@ -19,50 +19,50 @@ def VGG16D(X):
     with tf.variable_scope('VGG16D'):
         # First, two conv3-64
         with tf.variable_scope('layer1'): # Layer 1, 3x3 depth 64
-            l1 = tf.nn.relu(tf.nn.conv2d(X, get_weights([3, 3, 3, 64]), strides = [1, 1, 1, 1], padding = 'SAME')
-                            + get_biases([64]))
+            l1 = tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(X, get_weights([3, 3, 3, 64]), strides = [1, 1, 1, 1], padding = 'SAME'),
+                            get_biases([64])))
         with tf.variable_scope('layer2'): # Layer 2, 3x3 depth 64
-            l2 = tf.nn.relu(tf.nn.conv2d(l1, get_weights([3, 3, 64, 64]), strides = [1, 1, 1, 1], padding = 'SAME')
-                            + get_biases([64]))
+            l2 = tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(l1, get_weights([3, 3, 64, 64]), strides = [1, 1, 1, 1], padding = 'SAME'),
+                            get_biases([64])))
 
         # Maxpooling
         m2_3 = tf.nn.max_pool(l2, ksize = [1, 2, 2, 1], strides = [1, 2, 2, 1], padding = 'SAME')
 
         # Second, two conv3-128
         with tf.variable_scope('layer3'): # Layer 3, 3x3 depth 128
-            l3 = tf.nn.relu(tf.nn.conv2d(m2_3, get_weights([3, 3, 64, 128]), strides = [1, 1, 1, 1], padding = 'SAME')
-                            + get_biases([128]))
+            l3 = tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(m2_3, get_weights([3, 3, 64, 128]), strides = [1, 1, 1, 1], padding = 'SAME'),
+                            get_biases([128])))
         with tf.variable_scope('layer4'): # Layer 4, 3x3 depth 128
-            l4 = tf.nn.relu(tf.nn.conv2d(l3, get_weights([3, 3, 128, 128]), strides = [1, 1, 1, 1], padding = 'SAME')
-                            + get_biases([128]))
+            l4 = tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(l3, get_weights([3, 3, 128, 128]), strides = [1, 1, 1, 1], padding = 'SAME'),
+                            get_biases([128])))
 
         # Maxpooling
         m4_5 = tf.nn.max_pool(l4, ksize = [1, 2, 2, 1], strides = [1, 2, 2, 1], padding = 'SAME')
 
         # Third, three conv3-256
         with tf.variable_scope('layer5'): # Layer 5, 3x3 depth 256
-            l5 = tf.nn.relu(tf.nn.conv2d(m4_5, get_weights([3, 3, 128, 256]), strides = [1, 1, 1, 1], padding = 'SAME')
-                            + get_biases([256]))
+            l5 = tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(m4_5, get_weights([3, 3, 128, 256]), strides = [1, 1, 1, 1], padding = 'SAME'),
+                            get_biases([256])))
         with tf.variable_scope('layer6'): # Layer 6, 3x3 depth 256
-            l6 = tf.nn.relu(tf.nn.conv2d(l5, get_weights([3, 3, 256, 256]), strides = [1, 1, 1, 1], padding = 'SAME')
-                            + get_biases([256]))
+            l6 = tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(l5, get_weights([3, 3, 256, 256]), strides = [1, 1, 1, 1], padding = 'SAME'),
+                            get_biases([256])))
         with tf.variable_scope('layer7'): # Layer 7, 3x3 depth 256
-            l7 = tf.nn.relu(tf.nn.conv2d(l6, get_weights([3, 3, 256, 256]), strides = [1, 1, 1, 1], padding = 'SAME')
-                            + get_biases([256]))
+            l7 = tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(l6, get_weights([3, 3, 256, 256]), strides = [1, 1, 1, 1], padding = 'SAME'),
+                            get_biases([256])))
 
         # Maxpooling
         m7_8 = tf.nn.max_pool(l7, ksize = [1, 2, 2, 1], strides = [1, 2, 2, 1], padding = 'SAME')
 
         # Fourth, three conv3-512
         with tf.variable_scope('layer8'): # Layer 8, 3x3 depth 512
-            l8 = tf.nn.relu(tf.nn.conv2d(m7_8, get_weights([3, 3, 256, 512]), strides = [1, 1, 1, 1], padding = 'SAME')
-                            + get_biases([512]))
+            l8 = tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(m7_8, get_weights([3, 3, 256, 512]), strides = [1, 1, 1, 1], padding = 'SAME'),
+                            get_biases([512])))
         with tf.variable_scope('layer9'): # Layer 9, 3x3 depth 512
-            l9 = tf.nn.relu(tf.nn.conv2d(l8, get_weights([3, 3, 512, 512]), strides = [1, 1, 1, 1], padding = 'SAME')
-                            + get_biases([512]))
+            l9 = tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(l8, get_weights([3, 3, 512, 512]), strides = [1, 1, 1, 1], padding = 'SAME'),
+                            get_biases([512])))
         with tf.variable_scope('layer10'): # Layer 10, 3x3 depth 512
-            l10 = tf.nn.relu(tf.nn.conv2d(l9, get_weights([3, 3, 512, 512]), strides = [1, 1, 1, 1], padding = 'SAME')
-                            + get_biases([512]))
+            l10 = tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(l9, get_weights([3, 3, 512, 512]), strides = [1, 1, 1, 1], padding = 'SAME'),
+                            get_biases([512])))
         # Maxpooling
         m10_11 = tf.nn.max_pool(l10, ksize = [1, 2, 2, 1], strides = [1, 2, 2, 1], padding = 'SAME')
 
@@ -87,19 +87,19 @@ def RPN(X, caltech_dataset, training = False):
     with tf.variable_scope('RPN'):
         # First, a shared conv3-512 layer between the two outputs
         with tf.variable_scope('shared'): # Shared layer, 3x3 depth 512
-            shared_layer = tf.nn.relu(tf.nn.conv2d(X, get_weights([3, 3, 512, 512]), strides = [1, 1, 1, 1], padding = 'SAME')
-                            + get_biases([512]))
+            shared_layer = tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(X, get_weights([3, 3, 512, 512]), strides = [1, 1, 1, 1], padding = 'SAME'),
+                            get_biases([512])))
 
         # Classification layer: conv1-2*k
         with tf.variable_scope('cls'): # Classification layer, 1x1 depth 2*k
-            clas_layer = tf.nn.relu(tf.nn.conv2d(shared_layer, get_weights([1, 1, 512, 2*k]), strides = [1, 1, 1, 1], padding = 'SAME')
-                            + get_biases([2*k]))
+            clas_layer = tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(shared_layer, get_weights([1, 1, 512, 2*k]), strides = [1, 1, 1, 1], padding = 'SAME'),
+                            get_biases([2*k])))
             clas_layer = tf.reshape(clas_layer, [-1, 2])
 
         # Regression layer: conv1-4*k
         with tf.variable_scope('reg'): # Regression layer, 1x1 depth 4*k
-            reg_layer = tf.nn.relu(tf.nn.conv2d(shared_layer, get_weights([1, 1, 512, 4*k]), strides = [1, 1, 1, 1], padding = 'SAME')
-                            + get_biases([4*k]))
+            reg_layer = tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(shared_layer, get_weights([1, 1, 512, 4*k]), strides = [1, 1, 1, 1], padding = 'SAME'),
+                            get_biases([4*k])))
             reg_layer = tf.reshape(reg_layer, [-1, 4])
 
     return shared_layer, clas_layer, reg_layer
