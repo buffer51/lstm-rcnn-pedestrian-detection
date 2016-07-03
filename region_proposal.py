@@ -19,7 +19,7 @@ def VGG16D(X):
     with tf.variable_scope('VGG16D'):
         # First, two conv3-64
         with tf.variable_scope('layer1'): # Layer 1, 3x3 depth 64
-            l1 = tf.nn.relu(tf.nn.conv2d(tf.cast(X, tf.float32), get_weights([3, 3, 3, 64]), strides = [1, 1, 1, 1], padding = 'SAME')
+            l1 = tf.nn.relu(tf.nn.conv2d(X, get_weights([3, 3, 3, 64]), strides = [1, 1, 1, 1], padding = 'SAME')
                             + get_biases([64]))
         with tf.variable_scope('layer2'): # Layer 2, 3x3 depth 64
             l2 = tf.nn.relu(tf.nn.conv2d(l1, get_weights([3, 3, 64, 64]), strides = [1, 1, 1, 1], padding = 'SAME')
@@ -174,7 +174,8 @@ def create_test_summaries(test_placeholders):
 
 def trainer(caltech_dataset, input_placeholder, clas_placeholder, reg_placeholder):
     # Shared CNN
-    shared_cnn = VGG16D(input_placeholder)
+    input_data = tf.div(tf.sub(tf.cast(input_placeholder, tf.float32), 128.0), 128.0)
+    shared_cnn = VGG16D(input_data)
 
     # RPN
     shared_rpn, clas_rpn, reg_rpn = RPN(shared_cnn, caltech_dataset)
