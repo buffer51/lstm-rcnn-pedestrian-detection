@@ -68,14 +68,14 @@ def VGG16D(X):
 
         # Fifth, three conv3-512
         with tf.variable_scope('layer11'): # Layer 11, 3x3 depth 512
-            l11 = tf.nn.relu(tf.nn.conv2d(m10_11, get_weights([3, 3, 512, 512]), strides = [1, 1, 1, 1], padding = 'SAME')
-                            + get_biases([512]))
+            l11 = tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(m10_11, get_weights([3, 3, 512, 512]), strides = [1, 1, 1, 1], padding = 'SAME'),
+                            get_biases([512])))
         with tf.variable_scope('layer12'): # Layer 12, 3x3 depth 512
-            l12 = tf.nn.relu(tf.nn.conv2d(l11, get_weights([3, 3, 512, 512]), strides = [1, 1, 1, 1], padding = 'SAME')
-                            + get_biases([512]))
+            l12 = tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(l11, get_weights([3, 3, 512, 512]), strides = [1, 1, 1, 1], padding = 'SAME'),
+                            get_biases([512])))
         with tf.variable_scope('layer13'): # Layer 13, 3x3 depth 512
-            l13 = tf.nn.relu(tf.nn.conv2d(l12, get_weights([3, 3, 512, 512]), strides = [1, 1, 1, 1], padding = 'SAME')
-                            + get_biases([512]))
+            l13 = tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(l12, get_weights([3, 3, 512, 512]), strides = [1, 1, 1, 1], padding = 'SAME'),
+                            get_biases([512])))
 
         return l13
 
@@ -104,22 +104,23 @@ def RPN(X, caltech_dataset, training = False):
 
     return shared_layer, clas_layer, reg_layer
 
-def create_summaries(learning_rate, clas_loss, reg_loss, rpn_loss, clas_accuracy, clas_positive_percentage, clas_positive_accuracy):
-    learning_rate_summary = tf.scalar_summary('learning_rate', learning_rate)
-
-    loss_clas_summary = tf.scalar_summary('loss_clas', clas_loss)
-    loss_reg_summary = tf.scalar_summary('loss_reg', reg_loss)
-    loss_rpn_summary = tf.scalar_summary('loss_rpn', rpn_loss)
-
-    stat_accuracy_summary = tf.scalar_summary('stat_accuracy', clas_accuracy)
-    stat_positive_percentage_summary = tf.scalar_summary('stat_positive_percentage', clas_positive_percentage)
-    stat_positive_accuracy_summary = tf.scalar_summary('stat_positive_accuracy', clas_positive_accuracy)
-
-    return [learning_rate_summary, loss_clas_summary, loss_reg_summary, loss_rpn_summary, stat_accuracy_summary, stat_positive_percentage_summary, stat_positive_accuracy_summary]
-
-def create_train_summaries(learning_rate, clas_loss, reg_loss, rpn_loss, clas_accuracy, clas_positive_percentage, clas_positive_accuracy):
+def create_train_summaries(learning_rate, clas_loss, reg_loss, rpn_loss, clas_accuracy, clas_positive_percentage, clas_positive_accuracy, VGG16D_activations, RPN_activations, clas_activations):
     with tf.name_scope('train'):
-        return tf.merge_summary(create_summaries(learning_rate, clas_loss, reg_loss, rpn_loss, clas_accuracy, clas_positive_percentage, clas_positive_accuracy))
+        learning_rate_summary = tf.scalar_summary('learning_rate', learning_rate)
+
+        loss_clas_summary = tf.scalar_summary('loss_clas', clas_loss)
+        loss_reg_summary = tf.scalar_summary('loss_reg', reg_loss)
+        loss_rpn_summary = tf.scalar_summary('loss_rpn', rpn_loss)
+
+        stat_accuracy_summary = tf.scalar_summary('stat_accuracy', clas_accuracy)
+        stat_positive_percentage_summary = tf.scalar_summary('stat_positive_percentage', clas_positive_percentage)
+        stat_positive_accuracy_summary = tf.scalar_summary('stat_positive_accuracy', clas_positive_accuracy)
+
+        VGG16D_histogram = tf.histogram_summary('activations/VGG16D', VGG16D_activations)
+        RPN_histogram = tf.histogram_summary('activations/RPN', RPN_activations)
+        clas_histogram = tf.histogram_summary('activations/clas', clas_activations)
+
+        return tf.merge_summary([learning_rate_summary, loss_clas_summary, loss_reg_summary, loss_rpn_summary, stat_accuracy_summary, stat_positive_percentage_summary, stat_positive_accuracy_summary, VGG16D_histogram, RPN_histogram, clas_histogram])
 
 def compute_test_stats(test_placeholders, confusion_matrix):
     print('Confusion matrix:\n{}'.format(confusion_matrix))
@@ -227,7 +228,7 @@ def trainer(caltech_dataset, input_placeholder, clas_placeholder, reg_placeholde
     test_steps = [clas_examples, clas_answer, clas_guess]
 
     # Creating summaries
-    train_summaries = create_train_summaries(learning_rate, clas_loss, reg_loss, rpn_loss, clas_accuracy, clas_positive_percentage, clas_positive_accuracy)
+    train_summaries = create_train_summaries(learning_rate, clas_loss, reg_loss, rpn_loss, clas_accuracy, clas_positive_percentage, clas_positive_accuracy, shared_cnn, shared_rpn, clas_rpn)
 
     return global_step, learning_rate, train_step, train_summaries, test_steps
 
