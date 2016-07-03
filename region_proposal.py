@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 
 import sys, time
-from PIL import Image, ImageDraw
 
+import numpy as np
 import tensorflow as tf
 
 sys.path.append('caltech-dataset')
@@ -121,9 +121,56 @@ def create_train_summaries(learning_rate, clas_loss, reg_loss, rpn_loss, clas_ac
     with tf.name_scope('train'):
         return tf.merge_summary(create_summaries(learning_rate, clas_loss, reg_loss, rpn_loss, clas_accuracy, clas_positive_percentage, clas_positive_accuracy))
 
-def create_test_summaries(learning_rate, clas_loss, reg_loss, rpn_loss, clas_accuracy, clas_positive_percentage, clas_positive_accuracy):
+def compute_test_stats(test_placeholders, confusion_matrix):
+    print('Confusion matrix:\n{}'.format(confusion_matrix))
+
+    accuracy = float(np.trace(confusion_matrix)) / float(np.sum(confusion_matrix))
+    print('Accuracy: {}%'.format(100.0 * accuracy))
+
+    positive_recall = negative_recall = positive_precision = negative_precision = 0.0
+
+    if confusion_matrix[0][0] != 0:
+        positive_recall = float(confusion_matrix[0][0]) / float(np.sum(confusion_matrix, axis=1)[0])
+        positive_precision = float(confusion_matrix[0][0]) / float(np.sum(confusion_matrix, axis=0)[0])
+    if confusion_matrix[1][1] != 0:
+        negative_recall = float(confusion_matrix[1][1]) / float(np.sum(confusion_matrix, axis=1)[1])
+        negative_precision = float(confusion_matrix[1][1]) / float(np.sum(confusion_matrix, axis=0)[1])
+
+    recall = (positive_recall + negative_recall) / 2.0
+    precision = (positive_precision + negative_precision) / 2.0
+
+    print('Recall:\t\t{:.2f}%\t(positive {:.2f}%,\tnegative {:.2f}%)'.format(100.0 * recall, 100.0 * positive_recall, 100.0 * negative_recall))
+    print('Precision:\t{:.2f}%\t(positive {:.2f}%,\tnegative {:.2f}%)'.format(100.0 * precision, 100.0 * positive_precision, 100.0 * negative_precision))
+
+    F_score = 2.0 * (precision * recall) / (precision + recall)
+    print('F-score: {:.2f}%'.format(100.0 * F_score))
+
+    return {
+        test_placeholders[0]: accuracy,
+        test_placeholders[1]: positive_recall,
+        test_placeholders[2]: negative_recall,
+        test_placeholders[3]: recall,
+        test_placeholders[4]: positive_precision,
+        test_placeholders[5]: negative_precision,
+        test_placeholders[6]: precision,
+        test_placeholders[7]: F_score
+    }
+
+def create_test_summaries(test_placeholders):
     with tf.name_scope('test'):
-        return tf.merge_summary(create_summaries(learning_rate, clas_loss, reg_loss, rpn_loss, clas_accuracy, clas_positive_percentage, clas_positive_accuracy))
+        accuracy_summary = tf.scalar_summary('accuracy', test_placeholders[0])
+
+        positive_recall_summary = tf.scalar_summary('recall/positive', test_placeholders[1])
+        negative_recall_summary = tf.scalar_summary('recall/negative', test_placeholders[2])
+        recall_summary = tf.scalar_summary('recall/global', test_placeholders[3])
+
+        positive_precision_summary = tf.scalar_summary('precision/positive', test_placeholders[4])
+        negative_precision_summary = tf.scalar_summary('precision/negative', test_placeholders[5])
+        precision_summary = tf.scalar_summary('precision/global', test_placeholders[6])
+
+        F_score_summary = tf.scalar_summary('F-score', test_placeholders[7])
+
+        return tf.merge_summary([accuracy_summary, positive_recall_summary, negative_recall_summary, recall_summary, positive_precision_summary, negative_precision_summary,precision_summary, F_score_summary])
 
 def trainer(caltech_dataset, input_placeholder, clas_placeholder, reg_placeholder):
     # Shared CNN
@@ -176,13 +223,12 @@ def trainer(caltech_dataset, input_placeholder, clas_placeholder, reg_placeholde
     train_step = tf.train.MomentumOptimizer(learning_rate, 0.9).minimize(rpn_loss,
                                                        global_step = global_step)
 
-    test_step = rpn_loss
+    test_steps = [clas_examples, clas_answer, clas_guess]
 
     # Creating summaries
     train_summaries = create_train_summaries(learning_rate, clas_loss, reg_loss, rpn_loss, clas_accuracy, clas_positive_percentage, clas_positive_accuracy)
-    test_summaries = create_test_summaries(learning_rate, clas_loss, reg_loss, rpn_loss, clas_accuracy, clas_positive_percentage, clas_positive_accuracy)
 
-    return global_step, learning_rate, train_step, train_summaries, test_step, test_summaries
+    return global_step, learning_rate, train_step, train_summaries, test_steps
 
 if __name__ == '__main__':
     ### Create the training & testing sets ###
@@ -195,7 +241,11 @@ if __name__ == '__main__':
     reg_placeholder = tf.placeholder(tf.float32, [None, None, 4])
 
     ### Creating the trainer ###
-    global_step, learning_rate, train_step, train_summaries, test_step, test_summaries = trainer(caltech_dataset, input_placeholder, clas_placeholder, reg_placeholder)
+    global_step, learning_rate, train_step, train_summaries, test_steps = trainer(caltech_dataset, input_placeholder, clas_placeholder, reg_placeholder)
+
+    ### Creating test summaries ###
+    test_placeholders = [tf.placeholder(tf.float32) for i in range(8)]
+    test_summaries = create_test_summaries(test_placeholders)
 
     ### Create a saver/loader ###
     saver = tf.train.Saver()
@@ -214,15 +264,32 @@ if __name__ == '__main__':
         train_writer = tf.train.SummaryWriter('log/train', sess.graph, flush_secs = 10)
         test_writer = tf.train.SummaryWriter('log/test', flush_secs = 10)
 
+        last_epoch = 0
         while caltech_dataset.epoch < 5:
             results = sess.run([train_step, train_summaries], feed_dict = caltech_dataset.get_train_minibatch(input_placeholder, clas_placeholder, reg_placeholder))
             train_writer.add_summary(results[1], global_step = tf.train.global_step(sess, global_step))
 
-            if caltech_dataset.train_minibatch == 0 and caltech_dataset.epoch != 0 and caltech_dataset.epoch % 5 == 0:
+            if caltech_dataset.epoch != last_epoch:
+                last_epoch = caltech_dataset.epoch
+
                 # Do one pass of the whole testing set
+                print('Evaluating...')
+                confusion_matrix = np.zeros((2, 2), dtype = np.int64) # Truth as rows, guess as columns
                 while caltech_dataset.is_test_minibatch_left():
-                    results = sess.run([test_step, test_summaries], feed_dict = caltech_dataset.get_test_minibatch(input_placeholder, clas_placeholder, reg_placeholder))
-                    test_writer.add_summary(results[1], global_step = tf.train.global_step(sess, global_step))
+                    clas_examples, clas_answer, clas_guess = sess.run(test_steps, feed_dict = caltech_dataset.get_test_minibatch(input_placeholder, clas_placeholder, reg_placeholder))
+
+                    true_positives = np.dot(clas_examples, np.multiply(clas_answer, clas_guess))
+                    positives = np.dot(clas_examples, clas_answer)
+                    true_negatives = np.dot(clas_examples, np.multiply(1 - clas_answer, 1 - clas_guess))
+                    negatives = np.dot(clas_examples, 1 - clas_answer)
+
+                    confusion_matrix[0][0] += true_positives # True positives
+                    confusion_matrix[0][1] += positives - true_positives # False positives
+                    confusion_matrix[1][1] += true_negatives # True negatives
+                    confusion_matrix[1][0] += negatives - true_negatives # False negatives
+
+                results = sess.run(test_summaries, feed_dict = compute_test_stats(test_placeholders, confusion_matrix))
+                test_writer.add_summary(results, global_step = tf.train.global_step(sess, global_step))
 
         # Save the model to disk
         save_path = saver.save(sess, '/tmp/model.ckpt')
