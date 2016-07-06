@@ -225,7 +225,9 @@ def create_test_summaries(test_placeholders):
 
 def trainer(caltech_dataset, input_placeholder, clas_placeholder, reg_placeholder):
     # Shared CNN
-    input_data = tf.div(tf.sub(tf.cast(input_placeholder, tf.float32), 128.0), 128.0)
+    VGG_MEAN = [103.939, 116.779, 123.68]
+
+    input_data = tf.sub(tf.cast(input_placeholder, tf.float32), VGG_MEAN)
     shared_cnn = VGG16D(input_data)
 
     # RPN
