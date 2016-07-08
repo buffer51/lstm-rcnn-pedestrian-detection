@@ -8,126 +8,13 @@ import tensorflow as tf
 sys.path.append('caltech-dataset')
 from caltech import Caltech
 
-### CNN ###
+sys.path.append('vgg16')
+from vgg16 import VGG16D
+
 def get_weights(shape):
     return tf.get_variable('weights', shape, initializer = tf.random_normal_initializer(stddev=0.01))
 def get_biases(shape):
     return tf.get_variable('biases', shape, initializer = tf.zeros_initializer)
-
-# Implementing CNN part of VGG (11 layers, model 'A') based on http://arxiv.org/pdf/1409.1556v6.pdf
-def VGG16A(X):
-    with tf.variable_scope('VGG16A'):
-        # First, one conv3-64
-        with tf.variable_scope('layer1'): # Layer 1, 3x3 depth 64
-            l1 = tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(X, get_weights([3, 3, 3, 64]), strides = [1, 1, 1, 1], padding = 'SAME'),
-                            get_biases([64])))
-
-        # Maxpooling
-        m1_2 = tf.nn.max_pool(l1, ksize = [1, 2, 2, 1], strides = [1, 2, 2, 1], padding = 'SAME')
-
-        # Second, one conv3-128
-        with tf.variable_scope('layer2'): # Layer 2, 3x3 depth 128
-            l2 = tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(m1_2, get_weights([3, 3, 64, 128]), strides = [1, 1, 1, 1], padding = 'SAME'),
-                            get_biases([128])))
-
-        # Maxpooling
-        m2_3 = tf.nn.max_pool(l2, ksize = [1, 2, 2, 1], strides = [1, 2, 2, 1], padding = 'SAME')
-
-        # Third, two conv3-256
-        with tf.variable_scope('layer3'): # Layer 3, 3x3 depth 256
-            l3 = tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(m2_3, get_weights([3, 3, 128, 256]), strides = [1, 1, 1, 1], padding = 'SAME'),
-                            get_biases([256])))
-        with tf.variable_scope('layer4'): # Layer 4, 3x3 depth 256
-            l4 = tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(l3, get_weights([3, 3, 256, 256]), strides = [1, 1, 1, 1], padding = 'SAME'),
-                            get_biases([256])))
-
-        # Maxpooling
-        m4_5 = tf.nn.max_pool(l4, ksize = [1, 2, 2, 1], strides = [1, 2, 2, 1], padding = 'SAME')
-
-        # Fourth, two conv3-512
-        with tf.variable_scope('layer5'): # Layer 5, 3x3 depth 512
-            l5 = tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(m4_5, get_weights([3, 3, 256, 512]), strides = [1, 1, 1, 1], padding = 'SAME'),
-                            get_biases([512])))
-        with tf.variable_scope('layer6'): # Layer 6, 3x3 depth 512
-            l6 = tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(l5, get_weights([3, 3, 512, 512]), strides = [1, 1, 1, 1], padding = 'SAME'),
-                            get_biases([512])))
-        # Maxpooling
-        m6_7 = tf.nn.max_pool(l6, ksize = [1, 2, 2, 1], strides = [1, 2, 2, 1], padding = 'SAME')
-
-        # Fifth, two conv3-512
-        with tf.variable_scope('layer7'): # Layer 7, 3x3 depth 512
-            l7 = tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(m6_7, get_weights([3, 3, 512, 512]), strides = [1, 1, 1, 1], padding = 'SAME'),
-                            get_biases([512])))
-        with tf.variable_scope('layer8'): # Layer 8, 3x3 depth 512
-            l8 = tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(l7, get_weights([3, 3, 512, 512]), strides = [1, 1, 1, 1], padding = 'SAME'),
-                            get_biases([512])))
-
-        return l8
-
-# Implementing CNN part of VGG (16 layers, model 'D') based on http://arxiv.org/pdf/1409.1556v6.pdf
-def VGG16D(X):
-    with tf.variable_scope('VGG16D'):
-        # First, two conv3-64
-        with tf.variable_scope('layer1'): # Layer 1, 3x3 depth 64
-            l1 = tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(X, get_weights([3, 3, 3, 64]), strides = [1, 1, 1, 1], padding = 'SAME'),
-                            get_biases([64])))
-        with tf.variable_scope('layer2'): # Layer 2, 3x3 depth 64
-            l2 = tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(l1, get_weights([3, 3, 64, 64]), strides = [1, 1, 1, 1], padding = 'SAME'),
-                            get_biases([64])))
-
-        # Maxpooling
-        m2_3 = tf.nn.max_pool(l2, ksize = [1, 2, 2, 1], strides = [1, 2, 2, 1], padding = 'SAME')
-
-        # Second, two conv3-128
-        with tf.variable_scope('layer3'): # Layer 3, 3x3 depth 128
-            l3 = tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(m2_3, get_weights([3, 3, 64, 128]), strides = [1, 1, 1, 1], padding = 'SAME'),
-                            get_biases([128])))
-        with tf.variable_scope('layer4'): # Layer 4, 3x3 depth 128
-            l4 = tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(l3, get_weights([3, 3, 128, 128]), strides = [1, 1, 1, 1], padding = 'SAME'),
-                            get_biases([128])))
-
-        # Maxpooling
-        m4_5 = tf.nn.max_pool(l4, ksize = [1, 2, 2, 1], strides = [1, 2, 2, 1], padding = 'SAME')
-
-        # Third, three conv3-256
-        with tf.variable_scope('layer5'): # Layer 5, 3x3 depth 256
-            l5 = tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(m4_5, get_weights([3, 3, 128, 256]), strides = [1, 1, 1, 1], padding = 'SAME'),
-                            get_biases([256])))
-        with tf.variable_scope('layer6'): # Layer 6, 3x3 depth 256
-            l6 = tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(l5, get_weights([3, 3, 256, 256]), strides = [1, 1, 1, 1], padding = 'SAME'),
-                            get_biases([256])))
-        with tf.variable_scope('layer7'): # Layer 7, 3x3 depth 256
-            l7 = tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(l6, get_weights([3, 3, 256, 256]), strides = [1, 1, 1, 1], padding = 'SAME'),
-                            get_biases([256])))
-
-        # Maxpooling
-        m7_8 = tf.nn.max_pool(l7, ksize = [1, 2, 2, 1], strides = [1, 2, 2, 1], padding = 'SAME')
-
-        # Fourth, three conv3-512
-        with tf.variable_scope('layer8'): # Layer 8, 3x3 depth 512
-            l8 = tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(m7_8, get_weights([3, 3, 256, 512]), strides = [1, 1, 1, 1], padding = 'SAME'),
-                            get_biases([512])))
-        with tf.variable_scope('layer9'): # Layer 9, 3x3 depth 512
-            l9 = tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(l8, get_weights([3, 3, 512, 512]), strides = [1, 1, 1, 1], padding = 'SAME'),
-                            get_biases([512])))
-        with tf.variable_scope('layer10'): # Layer 10, 3x3 depth 512
-            l10 = tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(l9, get_weights([3, 3, 512, 512]), strides = [1, 1, 1, 1], padding = 'SAME'),
-                            get_biases([512])))
-        # Maxpooling
-        m10_11 = tf.nn.max_pool(l10, ksize = [1, 2, 2, 1], strides = [1, 2, 2, 1], padding = 'SAME')
-
-        # Fifth, three conv3-512
-        with tf.variable_scope('layer11'): # Layer 11, 3x3 depth 512
-            l11 = tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(m10_11, get_weights([3, 3, 512, 512]), strides = [1, 1, 1, 1], padding = 'SAME'),
-                            get_biases([512])))
-        with tf.variable_scope('layer12'): # Layer 12, 3x3 depth 512
-            l12 = tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(l11, get_weights([3, 3, 512, 512]), strides = [1, 1, 1, 1], padding = 'SAME'),
-                            get_biases([512])))
-        with tf.variable_scope('layer13'): # Layer 13, 3x3 depth 512
-            l13 = tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(l12, get_weights([3, 3, 512, 512]), strides = [1, 1, 1, 1], padding = 'SAME'),
-                            get_biases([512])))
-
-        return l13
 
 # Implementing the additionnal layers for RPN based on http://arxiv.org/pdf/1506.01497.pdf
 # Has 2 different outputs: regression of the boxes, and classification of those
@@ -225,10 +112,10 @@ def create_test_summaries(test_placeholders):
 
 def trainer(caltech_dataset, input_placeholder, clas_placeholder, reg_placeholder):
     # Shared CNN
-    VGG_MEAN = [103.939, 116.779, 123.68]
+    input_data = tf.cast(input_placeholder, tf.float32)
 
-    input_data = tf.sub(tf.cast(input_placeholder, tf.float32), VGG_MEAN)
-    shared_cnn = VGG16D(input_data)
+    vgg = VGG16D()
+    shared_cnn = vgg.build(input_data)
 
     # RPN
     shared_rpn, clas_rpn, reg_rpn = RPN(shared_cnn, caltech_dataset)
@@ -285,7 +172,7 @@ def trainer(caltech_dataset, input_placeholder, clas_placeholder, reg_placeholde
     # Creating summaries
     train_summaries = create_train_summaries(learning_rate, clas_loss, reg_loss, rpn_loss, clas_accuracy, clas_positive_percentage, clas_positive_accuracy, shared_cnn, shared_rpn, clas_rpn)
 
-    return global_step, learning_rate, train_step, train_summaries, test_steps
+    return global_step, learning_rate, train_step, train_summaries, test_steps, vgg
 
 if __name__ == '__main__':
     ### Create the training & testing sets ###
@@ -298,24 +185,25 @@ if __name__ == '__main__':
     reg_placeholder = tf.placeholder(tf.float32, [None, None, 4])
 
     ### Creating the trainer ###
-    global_step, learning_rate, train_step, train_summaries, test_steps = trainer(caltech_dataset, input_placeholder, clas_placeholder, reg_placeholder)
+    global_step, learning_rate, train_step, train_summaries, test_steps, vgg = trainer(caltech_dataset, input_placeholder, clas_placeholder, reg_placeholder)
 
     ### Creating test summaries ###
     test_placeholders = [tf.placeholder(tf.float32) for i in range(8)]
     test_summaries = create_test_summaries(test_placeholders)
 
     ### Create a saver/loader ###
+    restorer = tf.train.Saver(vgg.get_all_variables()) # Restores VGG weights & biases
     saver = tf.train.Saver()
 
     with tf.Session() as sess:
-        restore_path = None
+        # Initialize variables
+        tf.initialize_all_variables().run()
+
+        restore_path = 'vgg16/VGG16D.ckpt'
         if restore_path:
             # Restore variables from disk.
-            saver.restore(sess, restore_path)
+            restorer.restore(sess, restore_path)
             print('Model restored from: {}.'.format(restore_path))
-        else:
-            # Initialize variables
-            tf.initialize_all_variables().run()
 
         # Start summary writers
         train_writer = tf.train.SummaryWriter('log/train', sess.graph, flush_secs = 10)
