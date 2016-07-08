@@ -157,11 +157,11 @@ def trainer(caltech_dataset, input_placeholder, clas_placeholder, reg_placeholde
 
     global_step = tf.Variable(0, trainable = False, name = 'global_step')
     learning_rate = tf.train.exponential_decay(
-        0.01,               # Base learning rate.
+        0.001,               # Base learning rate.
         global_step,        # Current index into the dataset.
         1000,               # Decay step.
         0.95,               # Decay rate.
-        staircase=True)
+        staircase = True)
 
     # Use simple momentum for the optimization.
     train_step = tf.train.MomentumOptimizer(learning_rate, 0.9).minimize(rpn_loss,

@@ -3,9 +3,19 @@ import tensorflow as tf
 # Implementing CNN part of VGG based on http://arxiv.org/pdf/1409.1556v6.pdf
 
 def get_weights(shape):
-    return tf.get_variable('weights', shape, initializer = tf.random_normal_initializer(stddev=0.01))
+    scope_id = int(tf.get_variable_scope().name.replace('VGG16D/layer', ''))
+    trainable = True
+    if scope_id < 5:
+        trainable = False
+
+    return tf.get_variable('weights', shape, initializer = tf.random_normal_initializer(stddev=0.01), trainable = trainable)
+
 def get_biases(shape):
-    return tf.get_variable('biases', shape, initializer = tf.zeros_initializer)
+    scope_id = int(tf.get_variable_scope().name.replace('VGG16D/layer', ''))
+    trainable = True
+    if scope_id < 5:
+        trainable = False
+    return tf.get_variable('biases', shape, initializer = tf.zeros_initializer, trainable = trainable)
 
 class VGG16:
     VGG_MEAN = [123.68, 116.779, 103.939] # In RGB, not BGR
