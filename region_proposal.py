@@ -250,17 +250,17 @@ if __name__ == '__main__':
                 results = sess.run(test_summaries, feed_dict = compute_test_stats(test_placeholders, confusion_matrix))
                 eval_writer.add_summary(results, global_step = tf.train.global_step(sess, global_step))
 
-                if  caltech_dataset.epoch == max_epochs:
-                    # Do one pass of the whole testing set
-                    print('Testing...')
-                    confusion_matrix = np.zeros((2, 2), dtype = np.int64)
-                    while caltech_dataset.is_test_minibatch_left():
-                        clas_examples, clas_answer, clas_guess = sess.run(test_steps, feed_dict = caltech_dataset.get_test_minibatch(input_placeholder, clas_placeholder, reg_placeholder))
-
-                        confusion_matrix = accumulate_confusion_matrix(confusion_matrix, clas_examples, clas_answer, clas_guess)
-
-                    results = sess.run(test_summaries, feed_dict = compute_test_stats(test_placeholders, confusion_matrix))
-                    test_writer.add_summary(results, global_step = tf.train.global_step(sess, global_step))
+                # if  caltech_dataset.epoch == max_epochs:
+                #     # Do one pass of the whole testing set
+                #     print('Testing...')
+                #     confusion_matrix = np.zeros((2, 2), dtype = np.int64)
+                #     while caltech_dataset.is_test_minibatch_left():
+                #         clas_examples, clas_answer, clas_guess = sess.run(test_steps, feed_dict = caltech_dataset.get_test_minibatch(input_placeholder, clas_placeholder, reg_placeholder))
+                #
+                #         confusion_matrix = accumulate_confusion_matrix(confusion_matrix, clas_examples, clas_answer, clas_guess)
+                #
+                #     results = sess.run(test_summaries, feed_dict = compute_test_stats(test_placeholders, confusion_matrix))
+                #     test_writer.add_summary(results, global_step = tf.train.global_step(sess, global_step))
 
                 # Reset for training accumulation
                 confusion_matrix = np.zeros((2, 2), dtype = np.int64)
