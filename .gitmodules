@@ -1,6 +1,11 @@
 [submodule "caltech-dataset/caltech-pedestrian-dataset-extractor"]
 	path = caltech-dataset/caltech-pedestrian-dataset-extractor
 	url = https://github.com/jainanshul/caltech-pedestrian-dataset-extractor.git
+	ignore = dirty
 [submodule "caltech-dataset/caltech-pedestrian-dataset-converter"]
 	path = caltech-dataset/caltech-pedestrian-dataset-converter
 	url = https://github.com/mitmul/caltech-pedestrian-dataset-converter.git
+	ignore = dirty
+[submodule "vgg16/tensorflow-vgg16"]
+	path = vgg16/tensorflow-vgg16
+	url = https://github.com/ry/tensorflow-vgg16.git
