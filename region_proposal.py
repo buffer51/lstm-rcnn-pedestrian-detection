@@ -224,8 +224,9 @@ if __name__ == '__main__':
         test_writer = tf.train.SummaryWriter('log/test', flush_secs = 10)
 
         last_epoch = 0
+        max_epochs = 15
         confusion_matrix = np.zeros((2, 2), dtype = np.int64) # Truth as rows, guess as columns
-        while caltech_dataset.epoch < 15:
+        while caltech_dataset.epoch < max_epochs:
             results = sess.run([train_step, train_summaries] + test_steps, feed_dict = caltech_dataset.get_train_minibatch(input_placeholder, clas_placeholder, reg_placeholder))
             train_writer.add_summary(results[1], global_step = tf.train.global_step(sess, global_step))
 
@@ -249,7 +250,7 @@ if __name__ == '__main__':
                 results = sess.run(test_summaries, feed_dict = compute_test_stats(test_placeholders, confusion_matrix))
                 eval_writer.add_summary(results, global_step = tf.train.global_step(sess, global_step))
 
-                if  (caltech_dataset.epoch % 5) == 0:
+                if  caltech_dataset.epoch == max_epochs:
                     # Do one pass of the whole testing set
                     print('Testing...')
                     confusion_matrix = np.zeros((2, 2), dtype = np.int64)
