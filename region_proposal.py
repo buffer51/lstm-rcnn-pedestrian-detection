@@ -266,5 +266,5 @@ if __name__ == '__main__':
                 confusion_matrix = np.zeros((2, 2), dtype = np.int64)
 
         # Save the model to disk
-        save_path = saver.save(sess, '/tmp/model.ckpt')
+        save_path = saver.save(sess, 'current-model.ckpt')
         print('Model saved in file: {}'.format(save_path))
