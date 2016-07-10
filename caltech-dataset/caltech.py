@@ -109,6 +109,7 @@ class Caltech:
     def init(self):
         self.epoch = 0
         self.train_minibatch = 0
+        self.eval_minibatch = 0
         self.test_minibatch = 0
         print('Epoch: {}'.format(self.epoch))
 
@@ -170,10 +171,46 @@ class Caltech:
             reg_placeholder: reg_data
         }
 
+    def is_eval_minibatch_left(self):
+        if self.eval_minibatch == Caltech.MINIBATCH_FOR_EVAL:
+            self.eval_minibatch = 0
+            return False
+
+        return True
+
+    def get_eval_frame(self):
+        data = np.load(self.dataset_location + '/prepared/set{:02d}/V{:03d}.seq/{}.npz'.format(*self.testing[self.eval_minibatch]))
+        self.eval_minibatch += 1
+
+        input_data = data['input']
+        clas_negative = data['clas_negative']
+        clas_positive = data['clas_positive']
+        reg_data = data['reg']
+
+        clas_data = np.zeros(reg_data.shape[:2] + (2,), dtype = np.float32)
+        if len(clas_negative) > 0:
+            clas_data[0][clas_negative] = [1.0, 0.0]
+        if len(clas_positive) > 0:
+            clas_data[0][clas_positive] = [0.0, 1.0]
+
+        return input_data, clas_data, reg_data
+
+    def get_eval_minibatch(self, input_placeholder, clas_placeholder, reg_placeholder):
+        if Caltech.FRAMES_PER_TEST_MINIBATCH != 1:
+            print('ERROR: Not implemented')
+            exit(1)
+
+        input_data, clas_data, reg_data = self.get_eval_frame()
+
+        return {
+            input_placeholder: input_data,
+            clas_placeholder: clas_data,
+            reg_placeholder: reg_data
+        }
+
     def is_test_minibatch_left(self):
-        if self.test_minibatch == Caltech.MINIBATCH_FOR_EVAL:
+        if self.test_minibatch == len(self.testing):
             self.test_minibatch = 0
-            random.shuffle(self.testing)
             return False
 
         return True
