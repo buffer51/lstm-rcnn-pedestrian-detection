@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 import os, glob, random
-from math import ceil, sqrt
+from math import floor, sqrt
 
 import numpy as np
 
@@ -78,9 +78,9 @@ class Caltech:
         folder = self.dataset_location + '/images/set{:02d}/V{:03d}.seq'.format(set_number, seq_number)
 
         num_total_frames = len(glob.glob(folder + '/*.jpg'))
-        num_frames = int(ceil(float(num_total_frames) / float(Caltech.FRAME_MODULO)))
+        num_frames = int(floor(float(num_total_frames) / float(Caltech.FRAME_MODULO)))
 
-        return [(set_number, seq_number, Caltech.FRAME_MODULO * i) for i in range(num_frames)]
+        return [(set_number, seq_number, Caltech.FRAME_MODULO * i + Caltech.FRAME_MODULO - 1) for i in range(num_frames)]
 
     def parse_set(self, set_number):
         folder = self.dataset_location + '/images/set{:02d}'.format(set_number)
