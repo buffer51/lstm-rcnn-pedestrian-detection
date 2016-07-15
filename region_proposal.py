@@ -150,6 +150,7 @@ def trainer(caltech_dataset, input_placeholder, clas_placeholder, reg_placeholde
     clas_answer = tf.argmax(clas_truth, 1)
     clas_guess = tf.argmax(clas_rpn, 1)
     clas_comparison = tf.cast(tf.equal(clas_answer, clas_guess), tf.float32)
+    clas_prob = tf.nn.softmax(clas_rpn)
 
     clas_accuracy = tf.div(tf.reduce_sum(tf.mul(clas_comparison, clas_examples)), tf.reduce_sum(clas_examples))
     clas_positive_percentage = tf.div(tf.reduce_sum(clas_positive_examples), tf.reduce_sum(clas_examples))
@@ -167,7 +168,7 @@ def trainer(caltech_dataset, input_placeholder, clas_placeholder, reg_placeholde
     train_step = tf.train.MomentumOptimizer(learning_rate, 0.9).minimize(rpn_loss,
                                                        global_step = global_step)
 
-    test_steps = [clas_examples, clas_answer, clas_guess]
+    test_steps = [clas_examples, clas_answer, clas_guess, clas_prob, reg_truth, reg_rpn]
 
     # Creating summaries
     train_summaries = create_train_summaries(learning_rate, clas_loss, reg_loss, rpn_loss, clas_accuracy, clas_positive_percentage, clas_positive_accuracy, shared_cnn, shared_rpn, clas_rpn)
@@ -205,18 +206,24 @@ if __name__ == '__main__':
     test_summaries = create_test_summaries(test_placeholders)
 
     ### Create a saver/loader ###
-    restorer = tf.train.Saver(vgg.get_all_variables()) # Restores VGG weights & biases
-    saver = tf.train.Saver()
+    vgg_saver = tf.train.Saver(vgg.get_all_variables(), name = 'vgg_saver') # Restores VGG weights & biases
+    full_saver = tf.train.Saver(name = 'full_saver')
 
     with tf.Session() as sess:
         # Initialize variables
         tf.initialize_all_variables().run()
 
-        restore_path = 'vgg16/VGG16D.ckpt'
-        if restore_path:
+        vgg_restore_path = 'vgg16/VGG16D.ckpt'
+        full_restore_path = 'trained-model.ckpt'
+
+        if full_restore_path:
             # Restore variables from disk.
-            restorer.restore(sess, restore_path)
-            print('Model restored from: {}.'.format(restore_path))
+            full_saver.restore(sess, full_restore_path)
+            print('Full model restored from: {}.'.format(full_restore_path))
+        elif vgg_restore_path:
+            # Restore variables from disk.
+            vgg_saver.restore(sess, vgg_restore_path)
+            print('VGG model restored from: {}.'.format(vgg_restore_path))
 
         # Start summary writers
         train_writer = tf.train.SummaryWriter('log/train', sess.graph, flush_secs = 10)
@@ -243,28 +250,29 @@ if __name__ == '__main__':
                 print('Evaluating...')
                 confusion_matrix = np.zeros((2, 2), dtype = np.int64)
                 while caltech_dataset.is_eval_minibatch_left():
-                    clas_examples, clas_answer, clas_guess = sess.run(test_steps, feed_dict = caltech_dataset.get_eval_minibatch(input_placeholder, clas_placeholder, reg_placeholder))
+                    clas_examples, clas_answer, clas_guess, clas_prob, rpn_truth, rpn_guess = sess.run(test_steps, feed_dict = caltech_dataset.get_eval_minibatch(input_placeholder, clas_placeholder, reg_placeholder))
 
                     confusion_matrix = accumulate_confusion_matrix(confusion_matrix, clas_examples, clas_answer, clas_guess)
 
                 results = sess.run(test_summaries, feed_dict = compute_test_stats(test_placeholders, confusion_matrix))
                 eval_writer.add_summary(results, global_step = tf.train.global_step(sess, global_step))
 
-                # if  caltech_dataset.epoch == max_epochs:
-                #     # Do one pass of the whole testing set
-                #     print('Testing...')
-                #     confusion_matrix = np.zeros((2, 2), dtype = np.int64)
-                #     while caltech_dataset.is_test_minibatch_left():
-                #         clas_examples, clas_answer, clas_guess = sess.run(test_steps, feed_dict = caltech_dataset.get_test_minibatch(input_placeholder, clas_placeholder, reg_placeholder))
-                #
-                #         confusion_matrix = accumulate_confusion_matrix(confusion_matrix, clas_examples, clas_answer, clas_guess)
-                #
-                #     results = sess.run(test_summaries, feed_dict = compute_test_stats(test_placeholders, confusion_matrix))
-                #     test_writer.add_summary(results, global_step = tf.train.global_step(sess, global_step))
-
                 # Reset for training accumulation
                 confusion_matrix = np.zeros((2, 2), dtype = np.int64)
 
         # Save the model to disk
-        save_path = saver.save(sess, 'current-model.ckpt')
+        save_path = full_saver.save(sess, 'current-model.ckpt')
         print('Model saved in file: {}'.format(save_path))
+
+        # Do one pass of the whole testing set
+        print('Testing...')
+        confusion_matrix = np.zeros((2, 2), dtype = np.int64)
+        while caltech_dataset.is_test_minibatch_left():
+            minibatch_used, feed_dict = caltech_dataset.get_test_minibatch(input_placeholder, clas_placeholder, reg_placeholder)
+            clas_examples, clas_answer, clas_guess, clas_prob, rpn_truth, rpn_guess = sess.run(test_steps, feed_dict = feed_dict)
+
+            confusion_matrix = accumulate_confusion_matrix(confusion_matrix, clas_examples, clas_answer, clas_guess)
+            caltech_dataset.create_result(minibatch_used[0], minibatch_used[1], minibatch_used[2], clas_examples, clas_guess, clas_prob, rpn_guess)
+
+        results = sess.run(test_summaries, feed_dict = compute_test_stats(test_placeholders, confusion_matrix))
+        test_writer.add_summary(results, global_step = tf.train.global_step(sess, global_step))

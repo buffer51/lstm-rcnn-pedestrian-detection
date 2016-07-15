@@ -68,6 +68,26 @@ def IoU(rect1, rect2):
     # Intersection over union
     return int_area / (W1 * H1 + W2 * H2 - int_area)
 
+def IoU_wh(rect1, rect2): # Here rect are (x, y, w, h)
+    center1 = (rect1[0] + (rect1[2])/2.0, rect1[1] + (rect1[3])/2.0)
+    center2 = (rect2[0] + (rect2[2])/2.0, rect2[1] + (rect2[3])/2.0)
+
+    W = (rect1[2] + rect2[2])/2.0
+    H = (rect1[3] + rect2[3])/2.0
+
+    # Check if they intersect by distance
+    if abs(center1[0] - center2[0]) >= W or abs(center1[1] - center2[1]) >= H:
+        return 0.0
+
+    # If they do, the intersection's width and height are:
+    W_int = W - abs(center1[0] - center2[0])
+    H_int = H - abs(center1[1] - center2[1])
+    # Hence the intersection area is
+    int_area = W_int * H_int
+
+    # Intersection over union
+    return int_area / (rect1[2] * rect1[3] + rect2[2] * rect2[3] - int_area)
+
 def create_labels_for_frame(objects, pattern_anchors, image_height, image_width):
     ### Create anchors
     num_anchors_vertically, num_anchors_horizontally, anchors = create_anchors_for_frame(pattern_anchors, image_height, image_width)
