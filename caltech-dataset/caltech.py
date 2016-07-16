@@ -66,7 +66,8 @@ class Caltech:
     MINIMUM_POSITIVE_RATIO = 0.4
 
     # NMS settings
-    NMS_IOU_THRESHOLD = 0.5
+    NMS_IOU_THRESHOLD = 0.7
+    NMS_TOP_N = 2000 # Kept after NMS
 
     def __init__(self, dataset_location = 'caltech-dataset/dataset'):
         self.dataset_location = dataset_location
@@ -278,7 +279,7 @@ class Caltech:
 
         final_boxes = np.zeros((0, 4))
         final_scores = np.zeros((0, 1))
-        while len(index) > 0:
+        while len(index) > 0 and final_scores.shape[0] < Caltech.NMS_TOP_N:
             final_boxes = np.vstack([final_boxes, guess_boxes[index[0]]])
             final_scores = np.vstack([final_scores, guess_scores[index[0]][1]])
 
