@@ -82,7 +82,7 @@ class Caltech:
             if set_number <= 5:
                 self.training += self.parse_set(set_number)
             else:
-                self.testing += self.parse_set(set_number)
+                self.testing += self.parse_set(set_number, skip_frames = True)
 
         print('{} frames in training set'.format(len(self.training)))
         print('{} frames in testing set'.format(len(self.testing)))
@@ -100,21 +100,24 @@ class Caltech:
 
     ### Dataset generation
 
-    def parse_sequence(self, set_number, seq_number):
+    def parse_sequence(self, set_number, seq_number, skip_frames):
         folder = self.dataset_location + '/images/set{:02d}/V{:03d}.seq'.format(set_number, seq_number)
 
         num_total_frames = len(glob.glob(folder + '/*.jpg'))
-        num_frames = int(floor(float(num_total_frames) / float(Caltech.FRAME_MODULO)))
 
-        return [(set_number, seq_number, Caltech.FRAME_MODULO * i + Caltech.FRAME_MODULO - 1) for i in range(num_frames)]
+        if skip_frames:
+            num_frames = int(floor(float(num_total_frames) / float(Caltech.FRAME_MODULO)))
+            return [(set_number, seq_number, Caltech.FRAME_MODULO * i + Caltech.FRAME_MODULO - 1) for i in range(num_frames)]
+        else:
+            return [(set_number, seq_number, i) for i in range(num_total_frames)]
 
-    def parse_set(self, set_number):
+    def parse_set(self, set_number, skip_frames = False):
         folder = self.dataset_location + '/images/set{:02d}'.format(set_number)
         num_sequences = len([f for f in os.listdir(folder) if os.path.isdir(folder + '/' + f)])
 
         tuples = []
         for seq_number in range(num_sequences):
-            tuples += self.parse_sequence(set_number, seq_number)
+            tuples += self.parse_sequence(set_number, seq_number, skip_frames)
 
         return tuples
 
