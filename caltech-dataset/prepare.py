@@ -2,7 +2,7 @@
 
 import os, json, time
 from math import sqrt, floor, log, exp
-from PIL import Image
+from PIL import Image, ImageDraw
 
 import numpy as np
 
@@ -88,7 +88,7 @@ def IoU_wh(rect1, rect2): # Here rect are (x, y, w, h)
     # Intersection over union
     return int_area / (rect1[2] * rect1[3] + rect2[2] * rect2[3] - int_area)
 
-def create_labels_for_frame(objects, pattern_anchors, image_height, image_width):
+def create_labels_for_frame(image, objects, pattern_anchors, image_height, image_width):
     ### Create anchors
     num_anchors_vertically, num_anchors_horizontally, anchors = create_anchors_for_frame(pattern_anchors, image_height, image_width)
 
@@ -97,53 +97,66 @@ def create_labels_for_frame(objects, pattern_anchors, image_height, image_width)
     if objects:
         for o in objects:
             pos = o['pos']
-            if o['lbl'] in ['person', 'people']:
-                rect = (pos[0], pos[1], pos[0]+pos[2], pos[1]+pos[3])
-                persons.append({'rect': rect, 'used': False})
+            rect = (pos[0], pos[1], pos[0]+pos[2], pos[1]+pos[3])
+            if o['lbl'] in ['person']:
+                persons.append({'rect': rect, 'used': False, 'ignore': False})
+            else:
+                persons.append({'rect': rect, 'used': False, 'ignore': True})
 
     ### Determine positive and negative anchors
     if persons:
         # Compute all IoUs for each (anchor, person)
         IoUs = [[IoU(a['rect'], p['rect']) for p in persons] for a in anchors]
 
-        # Remove anchors that cross the image borders (set their IoUs to 0)
-        for i in range(len(anchors)):
-            rect = anchors[i]['rect']
-            if rect[0] < 0 or rect[1] < 0 or rect[2] >= image_width or rect[3] >= image_height:
-                IoUs[i] = [0 for p in persons]
-
         for i in range(len(anchors)): # For each anchor, find the biggest IoU with a person
+            # Remove anchors that cross the image borders (set their IoUs to 0)
+            if anchors[i]['rect'][0] < 0 or anchors[i]['rect'][1] < 0 or anchors[i]['rect'][2] >= image_width or anchors[i]['rect'][3] >= image_height:
+                continue
+
             maxIoU = max(IoUs[i])
             personIndexMax = IoUs[i].index(maxIoU)
 
             if maxIoU >= 0.7:
                 persons[personIndexMax]['used'] = True
-                anchors[i]['positive'] = True
                 anchors[i]['person'] = persons[personIndexMax]['rect']
+
+                if not persons[personIndexMax]['ignore']:
+                    anchors[i]['positive'] = True
+                else:
+                    anchors[i]['positive'] = None
             elif maxIoU <= 0.3:
                 anchors[i]['positive'] = False
 
         for j in range(len(persons)): # For each person
+            if persons[j]['ignore']:
+                continue
+
             if not persons[j]['used']: # Find the biggest IoU if no anchor was positive for this person
-                maxIoU = IoUs[0][j]
-                anchorIndexMax = 0
-                for i in range(1, len(anchors)):
+                maxIoU = -1.0
+                anchorIndexMax = -1
+                for i in range(len(anchors)):
+                    if anchors[i]['rect'][0] < 0 or anchors[i]['rect'][1] < 0 or anchors[i]['rect'][2] >= image_width or anchors[i]['rect'][3] >= image_height:
+                        continue
+
                     if IoUs[i][j] > maxIoU:
                         maxIoU = IoUs[i][j]
                         anchorIndexMax = i
 
-                if anchors[anchorIndexMax]['positive']: # Already positive for another person
-                    pass # Do nothing, this person won't have an anchor, sorry!
-                else:
-                    anchors[anchorIndexMax]['positive'] = True
-                    anchors[anchorIndexMax]['person'] = persons[j]['rect']
-                    persons[j]['used'] = True
+                if anchorIndexMax != -1:
+                    if anchors[anchorIndexMax]['positive'] == True: # Already positive for another person
+                        pass # Do nothing, this person won't have an anchor, sorry!
+                    else:
+                        anchors[anchorIndexMax]['positive'] = True
+                        anchors[anchorIndexMax]['person'] = persons[j]['rect']
+                        persons[j]['used'] = True
     else: # Nothing to find
         for i in range(len(anchors)):
             rect = anchors[i]['rect']
             # Set negative examples only for anchors that do not cross the borders
             if rect[0] >= 0 and rect[1] >= 0 and rect[2] < image_width and rect[3] < image_height:
                 anchors[i]['positive'] = False
+
+    # show_image_with_objects_and_anchors(image, objects, anchors)
 
     ### Convert anchors to labels for regression & classification
     clas_positive = []
@@ -177,6 +190,25 @@ def create_labels_for_frame(objects, pattern_anchors, image_height, image_width)
 
     return clas_positive, clas_negative, reg_data
 
+def show_image_with_objects_and_anchors(image, objects, anchors):
+    dr = ImageDraw.Draw(image)
+
+    for i in range(len(anchors)):
+        if anchors[i]['positive'] == True:
+            dr.rectangle((anchors[i]['rect'][0], anchors[i]['rect'][1], anchors[i]['rect'][2], anchors[i]['rect'][3]), outline = 'green')
+        elif anchors[i]['positive'] == False:
+            dr.rectangle((anchors[i]['rect'][0], anchors[i]['rect'][1], anchors[i]['rect'][2], anchors[i]['rect'][3]), outline = 'red')
+
+    if objects:
+        for o in objects:
+            pos = o['pos']
+            if o['lbl'] in ['person']:
+                dr.rectangle((pos[0], pos[1], pos[0]+pos[2], pos[1]+pos[3]), outline = 'blue')
+            else:
+                dr.rectangle((pos[0], pos[1], pos[0]+pos[2], pos[1]+pos[3]), outline = 'pink')
+
+    image.show()
+
 def create_input_and_labels_for_frame(dataset_location, set_number, seq_number, frame_number, annotations, pattern_anchors):
     if os.path.isfile(dataset_location + '/prepared/set{:02d}/V{:03d}.seq/{}.npz'.format(set_number, seq_number, frame_number)):
         return
@@ -193,7 +225,7 @@ def create_input_and_labels_for_frame(dataset_location, set_number, seq_number, 
         objects = None # Simply no objects for that frame
 
     # Create labels
-    clas_positive, clas_negative, reg_data = create_labels_for_frame(objects, pattern_anchors, image.size[1], image.size[0])
+    clas_positive, clas_negative, reg_data = create_labels_for_frame(image, objects, pattern_anchors, image.size[1], image.size[0])
 
     # Save everything
     if not os.path.isdir(dataset_location + '/prepared/set{:02d}/V{:03d}.seq'.format(set_number, seq_number)):
