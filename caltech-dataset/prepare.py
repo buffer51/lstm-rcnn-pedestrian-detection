@@ -233,6 +233,14 @@ def create_input_and_labels_for_frame(dataset_location, set_number, seq_number, 
 
     np.savez(dataset_location + '/prepared/set{:02d}/V{:03d}.seq/{}.npz'.format(set_number, seq_number, frame_number), input = input_data, clas_positive = clas_positive, clas_negative = clas_negative, reg = reg_data)
 
+def get_positive_instances(dataset_location, set_number, seq_number, frame_number):
+    if not os.path.isfile(dataset_location + '/prepared/set{:02d}/V{:03d}.seq/{}.npz'.format(set_number, seq_number, frame_number)):
+        print('ERROR: File {}/prepared/set{:02d}/V{:03d}.seq/{}.npz is not prepared'.format(dataset_location, set_number, seq_number, frame_number))
+        exit(1)
+
+    data = np.load(dataset_location + '/prepared/set{:02d}/V{:03d}.seq/{}.npz'.format(set_number, seq_number, frame_number))
+    return len(data['clas_positive'])
+
 def prepare_dataset(caltech_dataset):
     # Load annotations
     annotations = load_annotations(caltech_dataset.dataset_location)
@@ -255,3 +263,21 @@ def prepare_dataset(caltech_dataset):
         create_input_and_labels_for_frame(caltech_dataset.dataset_location, set_number, seq_number, frame_number, annotations, caltech_dataset.pattern_anchors)
 
     print('')
+
+def prepare_positive_instances(caltech_dataset):
+    positive_instances = np.zeros((len(caltech_dataset.training), 4))
+
+    current_set = -1
+    for i in range(len(caltech_dataset.training)):
+        (set_number, seq_number, frame_number) = caltech_dataset.training[i]
+        if current_set != set_number:
+            print('set{:02d}'.format(set_number))
+            current_set = set_number
+
+        positive_instances[i][0] = set_number
+        positive_instances[i][1] = seq_number
+        positive_instances[i][2] = frame_number
+        positive_instances[i][3] = get_positive_instances(caltech_dataset.dataset_location, set_number, seq_number, frame_number)
+
+
+    np.savez(caltech_dataset.dataset_location + '/prepared/positive_instances.npz', positive_instances = positive_instances)
