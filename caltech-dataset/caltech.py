@@ -75,18 +75,36 @@ class Caltech:
         # Define anchors
         self.pattern_anchors = Anchors([30, 55, 80], [0.31, 0.41, 0.51], 480, 640)
 
-        print('Generating training & testing sets...')
-        self.training = []
-        self.testing = []
-        for set_number in range(10 + 1):
-            if set_number <= 5:
-                self.training += self.parse_set(set_number)
-            else:
-                self.testing += self.parse_set(set_number, skip_frames = True)
+        if os.path.isfile(dataset_location + '/prepared/positive_instances.npz'):
+            print('Loading training & testing sets...')
+            self.training = []
+            positive_instances = np.load(dataset_location + '/prepared/positive_instances.npz')['positive_instances']
+
+            # Keep examples that have sufficient positive instances
+            positive_instances = positive_instances[positive_instances[:, 3] >= int(Caltech.MINIMUM_POSITIVE_RATIO * Caltech.ANCHORS_PER_TRAIN_FRAME)][:, np.array([True, True, True, False])].astype(int) # Keep only first 3 columns
+            self.training = [tuple(row) for row in positive_instances]
+
+            self.testing = []
+            for set_number in range(10 + 1):
+                if set_number <= 5:
+                    pass
+                else:
+                    self.testing += self.parse_set(set_number, skip_frames = True)
+        else:
+            print('Generating training & testing sets...')
+            self.training = []
+            self.testing = []
+            for set_number in range(10 + 1):
+                if set_number <= 5:
+                    self.training += self.parse_set(set_number)
+                else:
+                    self.testing += self.parse_set(set_number, skip_frames = True)
 
         print('{} frames in training set'.format(len(self.training)))
         print('{} frames in testing set'.format(len(self.testing)))
         print('')
+
+        self.show_image_with_cls(*self.training[40])
 
         print('Checking training & testing sets...')
         if (not self.check_dataset(self.training)) or (not self.check_dataset(self.testing)):
@@ -324,6 +342,24 @@ class Caltech:
 
         image.show()
 
+    def show_image_with_cls(self, set_number, seq_number, frame_number):
+        image = Image.open(self.dataset_location + '/images/set{:02d}/V{:03d}.seq/{}.jpg'.format(set_number, seq_number, frame_number))
+
+        data = np.load(self.dataset_location + '/prepared/set{:02d}/V{:03d}.seq/{}.npz'.format(set_number, seq_number, frame_number))
+
+        input_data = data['input']
+        clas_negative = data['clas_negative']
+        clas_positive = data['clas_positive']
+        reg_data = data['reg']
+
+        dr = ImageDraw.Draw(image)
+        for positive_id in clas_positive:
+            x = (positive_id / 9) % 40
+            y = (positive_id / 9) / 40
+
+            dr.rectangle((12*x, 12*y, 12*(x+1) - 1, 12*(y+1) - 1), outline = 'red')
+
+        image.show()
 
 if __name__ == '__main__':
     # This will automatically prepare the dataset
