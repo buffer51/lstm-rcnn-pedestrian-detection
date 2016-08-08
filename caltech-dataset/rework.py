@@ -41,7 +41,7 @@ class CaltechDataset:
     OUTPUT_SIZE = (30, 40)
     OUTPUT_CELL_SIZE = float(INPUT_SIZE[0]) / float(OUTPUT_SIZE[0])
 
-    MINIBATCH_SIZE = 256
+    MINIBATCH_SIZE = 64
 
     def __init__(self, dataset_location = 'caltech-dataset/dataset'):
         self.dataset_location = dataset_location
