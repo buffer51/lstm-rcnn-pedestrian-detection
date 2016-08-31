@@ -207,52 +207,56 @@ if __name__ == '__main__':
 
         # Start summary writers
         train_writer = tf.train.SummaryWriter('log/train', sess.graph, flush_secs = 10)
-        eval_writer = tf.train.SummaryWriter('log/eval', flush_secs = 10)
+        valid_writer = tf.train.SummaryWriter('log/valid', flush_secs = 10)
         test_writer = tf.train.SummaryWriter('log/test', flush_secs = 10)
 
-        last_epoch = 0
-        max_epochs = 15
-        confusion_matrix = np.zeros((2, 2), dtype = np.int64) # Truth as rows, guess as columns
-        while caltech.epoch < max_epochs:
-            results = sess.run([train_step, train_summaries] + test_steps, feed_dict = caltech.get_training_minibatch(input_placeholder, clas_placeholder))
-            train_writer.add_summary(results[1], global_step = tf.train.global_step(sess, global_step))
+        if not full_restore_path:
+            # Train the model first (and save it)
+            last_epoch = 0
+            max_epochs = 15
+            confusion_matrix = np.zeros((2, 2), dtype = np.int64) # Truth as rows, guess as columns
+            while caltech.epoch < max_epochs:
+                results = sess.run([train_step, train_summaries] + test_steps, feed_dict = caltech.get_training_minibatch(input_placeholder, clas_placeholder))
+                train_writer.add_summary(results[1], global_step = tf.train.global_step(sess, global_step))
 
-            confusion_matrix = accumulate_confusion_matrix(confusion_matrix, results[2], results[3], results[4])
+                confusion_matrix = accumulate_confusion_matrix(confusion_matrix, results[2], results[3], results[4])
 
-            if caltech.epoch != last_epoch:
-                last_epoch = caltech.epoch
+                if caltech.epoch != last_epoch:
+                    last_epoch = caltech.epoch
 
-                # Write training evaluation
-                results = sess.run(test_summaries, feed_dict = compute_test_stats(test_placeholders, confusion_matrix))
-                train_writer.add_summary(results, global_step = tf.train.global_step(sess, global_step))
+                    # Write training evaluation
+                    results = sess.run(test_summaries, feed_dict = compute_test_stats(test_placeholders, confusion_matrix))
+                    train_writer.add_summary(results, global_step = tf.train.global_step(sess, global_step))
 
-                # # Do one pass of the whole evaluation set
-                # print('Evaluating...')
-                # confusion_matrix = np.zeros((2, 2), dtype = np.int64)
-                # while caltech.is_eval_minibatch_left():
-                #     clas_examples, clas_answer, clas_guess, clas_prob, rpn_truth, rpn_guess = sess.run(test_steps, feed_dict = caltech.get_eval_minibatch(input_placeholder, clas_placeholder, reg_placeholder))
-                #
-                #     confusion_matrix = accumulate_confusion_matrix(confusion_matrix, clas_examples, clas_answer, clas_guess)
-                #
-                # results = sess.run(test_summaries, feed_dict = compute_test_stats(test_placeholders, confusion_matrix))
-                # eval_writer.add_summary(results, global_step = tf.train.global_step(sess, global_step))
+                    # Do one pass of the whole validation set
+                    print('Validating...')
+                    confusion_matrix = np.zeros((2, 2), dtype = np.int64)
+                    last_frame = False
+                    while not last_frame:
+                        feed_dict, last_frame = caltech.get_validation_minibatch(input_placeholder, clas_placeholder)
+                        results = sess.run(test_steps, feed_dict = feed_dict)
 
-                # Reset for training accumulation
-                confusion_matrix = np.zeros((2, 2), dtype = np.int64)
+                        confusion_matrix = accumulate_confusion_matrix(confusion_matrix, results[0], results[1], results[2])
 
-        # Save the model to disk
-        save_path = full_saver.save(sess, 'current-model.ckpt')
-        print('Model saved in file: {}'.format(save_path))
+                    results = sess.run(test_summaries, feed_dict = compute_test_stats(test_placeholders, confusion_matrix))
+                    valid_writer.add_summary(results, global_step = tf.train.global_step(sess, global_step))
 
-        # # Do one pass of the whole testing set
-        # print('Testing...')
-        # confusion_matrix = np.zeros((2, 2), dtype = np.int64)
-        # while caltech.is_test_minibatch_left():
-        #     minibatch_used, feed_dict = caltech.get_test_minibatch(input_placeholder, clas_placeholder, reg_placeholder)
-        #     clas_examples, clas_answer, clas_guess, clas_prob, rpn_truth, rpn_guess = sess.run(test_steps, feed_dict = feed_dict)
-        #
-        #     confusion_matrix = accumulate_confusion_matrix(confusion_matrix, clas_examples, clas_answer, clas_guess)
-        #     caltech.create_result(minibatch_used[0], minibatch_used[1], minibatch_used[2], clas_examples, clas_guess, clas_prob, rpn_guess)
-        #
-        # results = sess.run(test_summaries, feed_dict = compute_test_stats(test_placeholders, confusion_matrix))
-        # test_writer.add_summary(results, global_step = tf.train.global_step(sess, global_step))
+                    # Reset for training accumulation
+                    confusion_matrix = np.zeros((2, 2), dtype = np.int64)
+
+            # Save the model to disk
+            save_path = full_saver.save(sess, 'current-model.ckpt')
+            print('Model saved in file: {}'.format(save_path))
+
+        # Do one pass of the whole testing set
+        print('Testing...')
+        confusion_matrix = np.zeros((2, 2), dtype = np.int64)
+        last_frame = False
+        while not last_frame:
+            feed_dict, last_frame = caltech.get_testing_minibatch(input_placeholder, clas_placeholder)
+            results = sess.run(test_steps, feed_dict = feed_dict)
+
+            confusion_matrix = accumulate_confusion_matrix(confusion_matrix, results[0], results[1], results[2])
+
+        results = sess.run(test_summaries, feed_dict = compute_test_stats(test_placeholders, confusion_matrix))
+        test_writer.add_summary(results, global_step = tf.train.global_step(sess, global_step))
