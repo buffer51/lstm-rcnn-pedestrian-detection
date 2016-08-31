@@ -43,6 +43,13 @@ class CaltechDataset:
 
     MINIBATCH_SIZE = 64 # Number of examples (positive, negative or neither) used per image as a minibatch
 
+    NEGATIVE_THRESHOLD = 0.3
+    POSITIVE_THRESHOLD = 0.7
+
+    MINIMUM_VISIBLE_RATIO = 0.5 # Minimum ratio of area visible for occluded objects to be included
+    MINIMUM_WIDTH = 10 # Minimum width for objects to be included
+    USE_UNDESIRABLES = False # If set to true, anchors within undesirable objects (crowds, occluded pedestrians, ...) are set to be neither positive nor negative
+
     VALIDATION_RATIO = 1.0 / 3.0 # Ratio of training data kept for validation
 
     FRAME_MODULO = 30 # Modulo for selecting frames from sequences in testing
@@ -52,7 +59,7 @@ class CaltechDataset:
         self.dataset_location = dataset_location
         self.annotations = None
 
-        self.anchors = Anchors([30, 60, 100], [0.41])
+        self.anchors = Anchors([30, 60, 100, 200, 350], [0.41])
 
         self.epoch = 0
         self.training_minibatch = 0
@@ -209,10 +216,25 @@ class CaltechDataset:
         undesirables = []
         if objects:
             for o in objects:
+                good = False
                 pos = (o['pos'][1], o['pos'][0], o['pos'][3], o['pos'][2]) # Convert to (y, x, h, w)
+
                 if o['lbl'] in ['person']:
+                    good = True
+
+                    # Remove objects with very small width (are they errors in labeling?!)
+                    if pos[3] < CaltechDataset.MINIMUM_WIDTH:
+                        good = False
+
+                    if o['occl'] == 1:
+                        visible_pos = (o['posv'][1], o['posv'][0], o['posv'][3], o['posv'][2]) # Convert to (y, x, h, w)
+                        if visible_pos[2] * visible_pos[3] < CaltechDataset.MINIMUM_VISIBLE_RATIO * pos[2] * pos[3]:
+                            good = False
+                            pos = visible_pos
+
+                if good:
                     persons.append(pos)
-                else:
+                elif CaltechDataset.USE_UNDESIRABLES:
                     undesirables.append(pos)
 
         # Compute IoUs for positive & negative examples
@@ -233,9 +255,11 @@ class CaltechDataset:
                     maxIoU = 0.0
                     for i in range(len(persons)):
                         IoUs[y, x, anchor_id, i] = IoU(pos, persons[i])
-                        IoUs_negatives[y, x, anchor_id, i] = IoU_negative(pos, persons[i])
+                        # IoUs_negatives[y, x, anchor_id, i] = IoU_negative(pos, persons[i])
+                        IoUs_negatives[y, x, anchor_id, i] = IoU(pos, persons[i])
                     for i in range(len(undesirables)):
-                        IoUs_negatives[y, x, anchor_id, len(persons) + i] = IoU_negative(pos, undesirables[i])
+                        # IoUs_negatives[y, x, anchor_id, len(persons) + i] = IoU_negative(pos, undesirables[i])
+                        IoUs_negatives[y, x, anchor_id, len(persons) + i] = IoU(pos, undesirables[i])
 
         clas_data = np.zeros((CaltechDataset.OUTPUT_SIZE[0], CaltechDataset.OUTPUT_SIZE[1], self.anchors.num, 2), dtype = np.uint8) # [height, width, # anchors, 2]
 
@@ -243,7 +267,9 @@ class CaltechDataset:
         if len(persons) + len(undesirables) > 0:
             IoUs_negatives = np.max(IoUs_negatives, axis = 3)
 
-            clas_data[IoUs_negatives <= 0.3, 0] = 1.0
+            clas_data[IoUs_negatives <= CaltechDataset.NEGATIVE_THRESHOLD, 0] = 1.0
+        else:
+            clas_data[:, :, :, 0] = 1.0
 
         # Positive examples
         if len(persons) > 0:
@@ -256,8 +282,8 @@ class CaltechDataset:
 
             IoUs = np.max(IoUs, axis = 3)
 
-            clas_data[IoUs >= 0.7, 1] = 1.0
-            clas_data[IoUs >= 0.7, 0] = 0.0 # We want no overlap, so positives win over negatives
+            clas_data[IoUs >= CaltechDataset.POSITIVE_THRESHOLD, 1] = 1.0
+            clas_data[IoUs >= CaltechDataset.POSITIVE_THRESHOLD, 0] = 0.0 # We want no overlap, so positives win over negatives
 
         # Remove cross-boundaries
         clas_data[cross_boundaries == 1.0, 0] = 0.0
@@ -286,17 +312,30 @@ class CaltechDataset:
 
         if objects:
             for o in objects:
+                good = False
                 pos = (o['pos'][1], o['pos'][0], o['pos'][3], o['pos'][2]) # Convert to (y, x, h, w)
+
                 if o['lbl'] in ['person']:
+                    good = True
+
+                    # Remove objects with very small width (are they errors in labeling?!)
+                    if pos[3] < CaltechDataset.MINIMUM_WIDTH:
+                        good = False
+
+                    if o['occl'] == 1:
+                        visible_pos = (o['posv'][1], o['posv'][0], o['posv'][3], o['posv'][2]) # Convert to (y, x, h, w)
+                        if visible_pos[2] * visible_pos[3] < CaltechDataset.MINIMUM_VISIBLE_RATIO * pos[2] * pos[3]:
+                            good = False
+                            pos = visible_pos
+
+                if good:
                     dr.rectangle((pos[1], pos[0], pos[1] + pos[3], pos[0] + pos[2]), outline = 'blue')
                 else:
                     dr.rectangle((pos[1], pos[0], pos[1] + pos[3], pos[0] + pos[2]), outline = 'pink')
 
-
         clas_negative = np.load(self.dataset_location + '/prepared/set{:02d}/V{:03d}.seq/{}.negative.npy'.format(set_number, seq_number, frame_number))
         for i in range(clas_negative.shape[1]):
             y, x, anchor_id = clas_negative[:, i]
-            pos = self.get_anchor_at(anchor_id, y, x)
             dr.rectangle((CaltechDataset.OUTPUT_CELL_SIZE * x, CaltechDataset.OUTPUT_CELL_SIZE * y, CaltechDataset.OUTPUT_CELL_SIZE * (x+1) - 1, CaltechDataset.OUTPUT_CELL_SIZE * (y+1) - 1), outline = 'red')
 
         clas_positive = np.load(self.dataset_location + '/prepared/set{:02d}/V{:03d}.seq/{}.positive.npy'.format(set_number, seq_number, frame_number))
@@ -305,6 +344,60 @@ class CaltechDataset:
             pos = self.get_anchor_at(anchor_id, y, x)
             dr.rectangle((CaltechDataset.OUTPUT_CELL_SIZE * x, CaltechDataset.OUTPUT_CELL_SIZE * y, CaltechDataset.OUTPUT_CELL_SIZE * (x+1) - 1, CaltechDataset.OUTPUT_CELL_SIZE * (y+1) - 1), outline = 'green')
             dr.rectangle((pos[1], pos[0], pos[1] + pos[3], pos[0] + pos[2]), outline = 'green')
+
+        image.show()
+
+    def show_results(self, set_number, seq_number, frame_number, clas_guess):
+        self.load_annotations() # Will be needed
+
+        # Check the frame was prepared
+        if not self.is_frame_prepared(set_number, seq_number, frame_number):
+            self.prepare_frame(set_number, seq_number, frame_number)
+
+        image = Image.open(self.dataset_location + '/images/set{:02d}/V{:03d}.seq/{}.jpg'.format(set_number, seq_number, frame_number))
+        dr = ImageDraw.Draw(image)
+
+        # Retrieve objects for that frame in annotations
+        try:
+            objects = self.annotations['set{:02d}'.format(set_number)]['V{:03d}'.format(seq_number)]['frames']['{}'.format(frame_number)]
+        except KeyError as e:
+            objects = None # Simply no objects for that frame
+
+        if objects:
+            for o in objects:
+                good = False
+                pos = (o['pos'][1], o['pos'][0], o['pos'][3], o['pos'][2]) # Convert to (y, x, h, w)
+
+                if o['lbl'] in ['person']:
+                    good = True
+
+                    # Remove objects with very small width (are they errors in labeling?!)
+                    if pos[3] < CaltechDataset.MINIMUM_WIDTH:
+                        good = False
+
+                    if o['occl'] == 1:
+                        visible_pos = (o['posv'][1], o['posv'][0], o['posv'][3], o['posv'][2]) # Convert to (y, x, h, w)
+                        if visible_pos[2] * visible_pos[3] < CaltechDataset.MINIMUM_VISIBLE_RATIO * pos[2] * pos[3]:
+                            good = False
+                            pos = visible_pos
+
+                if good:
+                    dr.rectangle((pos[1], pos[0], pos[1] + pos[3], pos[0] + pos[2]), outline = 'blue')
+                else:
+                    dr.rectangle((pos[1], pos[0], pos[1] + pos[3], pos[0] + pos[2]), outline = 'pink')
+
+        clas_guess = clas_guess.reshape((CaltechDataset.OUTPUT_SIZE[0], CaltechDataset.OUTPUT_SIZE[1], self.anchors.num))
+
+        for y in range(clas_guess.shape[0]):
+            for x in range(clas_guess.shape[1]):
+                for anchor_id in range(clas_guess.shape[2]):
+                    pos = self.get_anchor_at(anchor_id, y, x)
+
+                    if clas_guess[y, x, anchor_id] == 0.0: # Negative
+                        dr.rectangle((CaltechDataset.OUTPUT_CELL_SIZE * x, CaltechDataset.OUTPUT_CELL_SIZE * y, CaltechDataset.OUTPUT_CELL_SIZE * (x+1) - 1, CaltechDataset.OUTPUT_CELL_SIZE * (y+1) - 1), outline = 'red')
+                    else: # Positive
+                        dr.rectangle((CaltechDataset.OUTPUT_CELL_SIZE * x, CaltechDataset.OUTPUT_CELL_SIZE * y, CaltechDataset.OUTPUT_CELL_SIZE * (x+1) - 1, CaltechDataset.OUTPUT_CELL_SIZE * (y+1) - 1), outline = 'green')
+                        dr.rectangle((pos[1], pos[0], pos[1] + pos[3], pos[0] + pos[2]), outline = 'green')
 
         image.show()
 
