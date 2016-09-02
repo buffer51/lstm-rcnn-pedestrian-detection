@@ -37,23 +37,27 @@ class Anchors:
                 self.widths.append(w)
 
 class CaltechDataset:
+    ### Input & output sizes ###
     INPUT_SIZE = (480, 640)
     OUTPUT_SIZE = (30, 40)
     OUTPUT_CELL_SIZE = float(INPUT_SIZE[0]) / float(OUTPUT_SIZE[0])
 
-    MINIBATCH_SIZE = 64 # Number of examples (positive, negative or neither) used per image as a minibatch
+    ### Parameters controlling the size of training, validation & testing sets ###
+    RANDOM_SEED = 64464 # Used for selecting reproducable subsets
+    TRAINING_SIZE = 100 # Number of testing frames kept from all available
+    VALIDATION_RATIO = 1.0 / 3.0 # Ratio of training data kept for validation
+    TESTING_SIZE = 100 # Number of testing frames kept from all available
+    FRAME_MODULO = 30 # Modulo for selecting frames from sequences in testing
 
-    NEGATIVE_THRESHOLD = 0.3
-    POSITIVE_THRESHOLD = 0.7
-
+    ### Parameters controlling how the classification is created ###
     MINIMUM_VISIBLE_RATIO = 0.5 # Minimum ratio of area visible for occluded objects to be included
     MINIMUM_WIDTH = 10 # Minimum width for objects to be included
     USE_UNDESIRABLES = False # If set to true, anchors within undesirable objects (crowds, occluded pedestrians, ...) are set to be neither positive nor negative
+    NEGATIVE_THRESHOLD = 0.3
+    POSITIVE_THRESHOLD = 0.7
 
-    VALIDATION_RATIO = 1.0 / 3.0 # Ratio of training data kept for validation
-
-    FRAME_MODULO = 30 # Modulo for selecting frames from sequences in testing
-    TESTING_SIZE = 100 # Number of testing frames kept from all available
+    ### Parameters controlling how examples are fed while training ###
+    MINIBATCH_SIZE = 64 # Number of examples (positive, negative or neither) used per image as a minibatch
 
     def __init__(self, dataset_location = 'caltech-dataset/dataset'):
         self.dataset_location = dataset_location
@@ -66,8 +70,8 @@ class CaltechDataset:
         self.validation_minibatch = 0
         self.testing_minibatch = 0
 
-        # self.set_training([(0, 2, 875), (1, 0, 1435), (1, 2, 844)]) # TEMP
-        self.set_training([(0, 1, 975), (3, 8, 240), (3, 8, 262), (3, 8, 279), (3, 8, 280), (3, 8, 293), (3, 8, 294), (3, 8, 295), (3, 8, 299), (3, 8, 300), (3, 8, 306), (3, 8, 308), (3, 8, 309), (3, 8, 313), (3, 8, 314), (3, 8, 315), (3, 8, 316), (3, 8, 317), (3, 8, 318), (3, 8, 321), (3, 8, 322), (3, 8, 326), (3, 8, 327), (3, 8, 334), (3, 8, 335), (3, 8, 336), (3, 8, 342), (3, 8, 345), (3, 8, 347), (3, 8, 348), (3, 8, 349), (3, 8, 350), (3, 8, 351), (3, 8, 358), (3, 8, 359), (3, 8, 360), (3, 8, 361), (3, 8, 362), (3, 8, 363), (3, 8, 364), (3, 8, 365), (3, 8, 368), (3, 8, 369), (3, 8, 370), (3, 8, 371), (3, 8, 372), (3, 8, 373), (3, 8, 374), (3, 8, 380), (3, 8, 381), (3, 8, 382), (3, 8, 391), (3, 8, 392), (3, 8, 393), (3, 8, 396), (3, 8, 397), (3, 8, 398), (3, 8, 401), (3, 8, 404), (3, 8, 410), (3, 8, 420), (3, 8, 427), (3, 8, 429), (3, 8, 430), (3, 8, 431), (3, 8, 434), (3, 8, 437), (3, 8, 443), (3, 8, 444), (3, 8, 451), (3, 8, 455), (3, 8, 456), (3, 8, 457), (3, 8, 458), (3, 8, 459), (3, 8, 460), (3, 8, 462), (3, 8, 466), (3, 8, 467), (3, 8, 478), (3, 8, 479), (3, 8, 480), (3, 8, 492), (3, 8, 493), (3, 8, 514), (3, 8, 515)])
+        # self.set_training([(0, 1, 975), (3, 8, 240), (3, 8, 262), (3, 8, 279), (3, 8, 280), (3, 8, 293), (3, 8, 294), (3, 8, 295), (3, 8, 299), (3, 8, 300), (3, 8, 306), (3, 8, 308), (3, 8, 309), (3, 8, 313), (3, 8, 314), (3, 8, 315), (3, 8, 316), (3, 8, 317), (3, 8, 318), (3, 8, 321), (3, 8, 322), (3, 8, 326), (3, 8, 327), (3, 8, 334), (3, 8, 335), (3, 8, 336), (3, 8, 342), (3, 8, 345), (3, 8, 347), (3, 8, 348), (3, 8, 349), (3, 8, 350), (3, 8, 351), (3, 8, 358), (3, 8, 359), (3, 8, 360), (3, 8, 361), (3, 8, 362), (3, 8, 363), (3, 8, 364), (3, 8, 365), (3, 8, 368), (3, 8, 369), (3, 8, 370), (3, 8, 371), (3, 8, 372), (3, 8, 373), (3, 8, 374), (3, 8, 380), (3, 8, 381), (3, 8, 382), (3, 8, 391), (3, 8, 392), (3, 8, 393), (3, 8, 396), (3, 8, 397), (3, 8, 398), (3, 8, 401), (3, 8, 404), (3, 8, 410), (3, 8, 420), (3, 8, 427), (3, 8, 429), (3, 8, 430), (3, 8, 431), (3, 8, 434), (3, 8, 437), (3, 8, 443), (3, 8, 444), (3, 8, 451), (3, 8, 455), (3, 8, 456), (3, 8, 457), (3, 8, 458), (3, 8, 459), (3, 8, 460), (3, 8, 462), (3, 8, 466), (3, 8, 467), (3, 8, 478), (3, 8, 479), (3, 8, 480), (3, 8, 492), (3, 8, 493), (3, 8, 514), (3, 8, 515)])
+        self.discover_training()
 
         self.discover_testing()
 
@@ -90,18 +94,26 @@ class CaltechDataset:
 
         return tuples
 
+    def discover_training(self):
+        training = []
+        for set_number in range(5 + 1):
+            training += self.discover_set(set_number, skip_frames = False)
+
+        random.seed(CaltechDataset.RANDOM_SEED) # For reproducibility
+        self.set_training([training[i] for i in sorted(random.sample(range(len(training)), CaltechDataset.TRAINING_SIZE))])
+
     def discover_testing(self):
         testing = []
         for set_number in range(6, 10 + 1):
             testing += self.discover_set(set_number, skip_frames = True)
 
-        random.seed(45234) # For reproducibility
+        random.seed(CaltechDataset.RANDOM_SEED) # For reproducibility
         self.testing = [testing[i] for i in sorted(random.sample(range(len(testing)), CaltechDataset.TESTING_SIZE))]
         print('{} testing examples kept (out of {})'.format(len(self.testing), len(testing)))
 
     def set_training(self, training):
         # Select a portion of the training set for validation
-        random.seed(45234) # For reproducibility
+        random.seed(CaltechDataset.RANDOM_SEED) # For reproducibility
         indices = range(len(training))
         random.shuffle(indices)
         num_training = len(training) - int(float(len(training)) * CaltechDataset.VALIDATION_RATIO)
@@ -312,7 +324,6 @@ class CaltechDataset:
 
         if objects:
             for o in objects:
-                good = False
                 pos = (o['pos'][1], o['pos'][0], o['pos'][3], o['pos'][2]) # Convert to (y, x, h, w)
 
                 if o['lbl'] in ['person']:
@@ -328,10 +339,12 @@ class CaltechDataset:
                             good = False
                             pos = visible_pos
 
-                if good:
-                    dr.rectangle((pos[1], pos[0], pos[1] + pos[3], pos[0] + pos[2]), outline = 'blue')
+                    if good:
+                        dr.rectangle((pos[1], pos[0], pos[1] + pos[3], pos[0] + pos[2]), outline = 'blue')
+                    else:
+                        dr.rectangle((pos[1], pos[0], pos[1] + pos[3], pos[0] + pos[2]), outline = 'pink')
                 else:
-                    dr.rectangle((pos[1], pos[0], pos[1] + pos[3], pos[0] + pos[2]), outline = 'pink')
+                    dr.rectangle((pos[1], pos[0], pos[1] + pos[3], pos[0] + pos[2]), outline = 'black')
 
         clas_negative = np.load(self.dataset_location + '/prepared/set{:02d}/V{:03d}.seq/{}.negative.npy'.format(set_number, seq_number, frame_number))
         for i in range(clas_negative.shape[1]):
@@ -365,7 +378,6 @@ class CaltechDataset:
 
         if objects:
             for o in objects:
-                good = False
                 pos = (o['pos'][1], o['pos'][0], o['pos'][3], o['pos'][2]) # Convert to (y, x, h, w)
 
                 if o['lbl'] in ['person']:
@@ -381,10 +393,12 @@ class CaltechDataset:
                             good = False
                             pos = visible_pos
 
-                if good:
-                    dr.rectangle((pos[1], pos[0], pos[1] + pos[3], pos[0] + pos[2]), outline = 'blue')
+                    if good:
+                        dr.rectangle((pos[1], pos[0], pos[1] + pos[3], pos[0] + pos[2]), outline = 'blue')
+                    else:
+                        dr.rectangle((pos[1], pos[0], pos[1] + pos[3], pos[0] + pos[2]), outline = 'pink')
                 else:
-                    dr.rectangle((pos[1], pos[0], pos[1] + pos[3], pos[0] + pos[2]), outline = 'pink')
+                    dr.rectangle((pos[1], pos[0], pos[1] + pos[3], pos[0] + pos[2]), outline = 'black')
 
         clas_guess = clas_guess.reshape((CaltechDataset.OUTPUT_SIZE[0], CaltechDataset.OUTPUT_SIZE[1], self.anchors.num))
 
@@ -420,3 +434,34 @@ if __name__ == '__main__':
     caltech = CaltechDataset('dataset')
     caltech.prepare()
     caltech.show_frame(*caltech.training[0])
+
+    # Some statistics on the sets used
+    num_negatives = 0
+    num_positives = 0
+    for minibatch in caltech.training:
+        input_data, clas_negative, clas_positive = caltech.load_frame(*minibatch)
+        num_negatives += clas_negative.shape[1]
+        num_positives += clas_positive.shape[1]
+    print('Positive examples: {}'.format(num_positives))
+    print('Negative examples: {}'.format(num_negatives))
+    print('Ratio: {}'.format(float(num_positives) / float(num_positives + num_negatives)))
+
+    num_negatives = 0
+    num_positives = 0
+    for minibatch in caltech.validation:
+        input_data, clas_negative, clas_positive = caltech.load_frame(*minibatch)
+        num_negatives += clas_negative.shape[1]
+        num_positives += clas_positive.shape[1]
+    print('Positive examples: {}'.format(num_positives))
+    print('Negative examples: {}'.format(num_negatives))
+    print('Ratio: {}'.format(float(num_positives) / float(num_positives + num_negatives)))
+
+    num_negatives = 0
+    num_positives = 0
+    for minibatch in caltech.testing:
+        input_data, clas_negative, clas_positive = caltech.load_frame(*minibatch)
+        num_negatives += clas_negative.shape[1]
+        num_positives += clas_positive.shape[1]
+    print('Positive examples: {}'.format(num_positives))
+    print('Negative examples: {}'.format(num_negatives))
+    print('Ratio: {}'.format(float(num_positives) / float(num_positives + num_negatives)))
