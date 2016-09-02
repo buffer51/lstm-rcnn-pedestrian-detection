@@ -33,8 +33,8 @@ def RPN(X, num_anchors, training = False):
 
         # Third, a classification layer
         with tf.variable_scope('cls'): # Classification layer, 1x1 depth 2 * num_anchors
-            clas_layer = tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(l2, get_weights([1, 1, 4096, 2 * num_anchors]), strides = [1, 1, 1, 1], padding = 'SAME'),
-                            get_biases([2 * num_anchors])))
+            clas_layer = tf.nn.bias_add(tf.nn.conv2d(l2, get_weights([1, 1, 4096, 2 * num_anchors]), strides = [1, 1, 1, 1], padding = 'SAME'),
+                            get_biases([2 * num_anchors]))
 
     return clas_layer
 
