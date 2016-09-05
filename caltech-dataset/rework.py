@@ -119,10 +119,15 @@ class CaltechDataset:
         num_training = len(training) - int(float(len(training)) * CaltechDataset.VALIDATION_RATIO)
 
         self.training = [training[i] for i in sorted(indices[:num_training])]
+        self.shuffle_training()
         print('{} training examples'.format(len(self.training)))
 
         self.validation = [training[i] for i in sorted(indices[num_training:])]
         print('{} validation examples'.format(len(self.validation)))
+
+    def shuffle_training(self):
+        random.seed(CaltechDataset.RANDOM_SEED + self.epoch)
+        random.shuffle(self.training)
 
     def get_training_minibatch(self, input_placeholder, clas_placeholder, reg_placeholder):
         input_data, clas_negative, clas_positive, reg_positive = self.load_frame(*self.training[self.training_minibatch])
@@ -130,6 +135,7 @@ class CaltechDataset:
         if self.training_minibatch == len(self.training):
             self.training_minibatch = 0
             self.epoch += 1
+            self.shuffle_training()
 
         if clas_negative.shape[1] > CaltechDataset.MINIBATCH_SIZE / 2:
             selected = np.random.choice(clas_negative.shape[1], CaltechDataset.MINIBATCH_SIZE / 2, replace = False)
@@ -476,10 +482,8 @@ class CaltechDataset:
 
 if __name__ == '__main__':
     caltech = CaltechDataset('dataset')
-    # caltech.prepare()
-    # caltech.show_frame(*caltech.training[0])
-    caltech.get_training_minibatch(0, 1)
-    exit(1)
+    caltech.prepare()
+    caltech.show_frame(*caltech.training[0])
 
     # Some statistics on the sets used
     num_negatives = 0
