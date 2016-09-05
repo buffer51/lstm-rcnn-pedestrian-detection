@@ -124,8 +124,8 @@ class CaltechDataset:
         self.validation = [training[i] for i in sorted(indices[num_training:])]
         print('{} validation examples'.format(len(self.validation)))
 
-    def get_training_minibatch(self, input_placeholder, clas_placeholder):
-        input_data, clas_negative, clas_positive = self.load_frame(*self.training[self.training_minibatch])
+    def get_training_minibatch(self, input_placeholder, clas_placeholder, reg_placeholder):
+        input_data, clas_negative, clas_positive, reg_positive = self.load_frame(*self.training[self.training_minibatch])
         self.training_minibatch = self.training_minibatch + 1
         if self.training_minibatch == len(self.training):
             self.training_minibatch = 0
@@ -138,19 +138,23 @@ class CaltechDataset:
         if clas_positive.shape[1] > CaltechDataset.MINIBATCH_SIZE / 2:
             selected = np.random.choice(clas_positive.shape[1], CaltechDataset.MINIBATCH_SIZE / 2, replace = False)
             clas_positive = clas_positive[:, selected]
+            reg_positive = reg_positive[selected, :]
 
         clas_data = np.zeros((1, CaltechDataset.OUTPUT_SIZE[0], CaltechDataset.OUTPUT_SIZE[1], self.anchors.num, 2)) # [?, height, width, # anchors, 2]
+        reg_data = np.zeros((1, CaltechDataset.OUTPUT_SIZE[0], CaltechDataset.OUTPUT_SIZE[1], self.anchors.num, 4)) # [?, height, width, # anchors, 4]
 
         clas_data[(0,) + tuple(clas_negative) + (0,)] = 1.0
         clas_data[(0,) + tuple(clas_positive) + (1,)] = 1.0
+        reg_data[(0,) + tuple(clas_positive)] = reg_positive
 
         return {
             input_placeholder: input_data,
-            clas_placeholder: clas_data
+            clas_placeholder: clas_data,
+            reg_placeholder: reg_data
         }
 
-    def get_validation_minibatch(self, input_placeholder, clas_placeholder):
-        input_data, clas_negative, clas_positive = self.load_frame(*self.validation[self.validation_minibatch])
+    def get_validation_minibatch(self, input_placeholder, clas_placeholder, reg_placeholder):
+        input_data, clas_negative, clas_positive, reg_positive = self.load_frame(*self.validation[self.validation_minibatch])
         self.validation_minibatch = self.validation_minibatch + 1
         if self.validation_minibatch == len(self.validation):
             self.validation_minibatch = 0
@@ -159,17 +163,20 @@ class CaltechDataset:
             last_frame = False
 
         clas_data = np.zeros((1, CaltechDataset.OUTPUT_SIZE[0], CaltechDataset.OUTPUT_SIZE[1], self.anchors.num, 2)) # [?, height, width, # anchors, 2]
+        reg_data = np.zeros((1, CaltechDataset.OUTPUT_SIZE[0], CaltechDataset.OUTPUT_SIZE[1], self.anchors.num, 4)) # [?, height, width, # anchors, 4]
 
         clas_data[(0,) + tuple(clas_negative) + (0,)] = 1.0
         clas_data[(0,) + tuple(clas_positive) + (1,)] = 1.0
+        reg_data[(0,) + tuple(clas_positive)] = reg_positive
 
         return {
             input_placeholder: input_data,
             clas_placeholder: clas_data,
+            reg_placeholder: reg_data
         }, last_frame
 
-    def get_testing_minibatch(self, input_placeholder, clas_placeholder):
-        input_data, clas_negative, clas_positive = self.load_frame(*self.testing[self.testing_minibatch])
+    def get_testing_minibatch(self, input_placeholder, clas_placeholder, reg_placeholder):
+        input_data, clas_negative, clas_positive, reg_positive = self.load_frame(*self.testing[self.testing_minibatch])
         self.testing_minibatch = self.testing_minibatch + 1
         if self.testing_minibatch == len(self.testing):
             self.testing_minibatch = 0
@@ -178,13 +185,16 @@ class CaltechDataset:
             last_frame = False
 
         clas_data = np.zeros((1, CaltechDataset.OUTPUT_SIZE[0], CaltechDataset.OUTPUT_SIZE[1], self.anchors.num, 2)) # [?, height, width, # anchors, 2]
+        reg_data = np.zeros((1, CaltechDataset.OUTPUT_SIZE[0], CaltechDataset.OUTPUT_SIZE[1], self.anchors.num, 4)) # [?, height, width, # anchors, 4]
 
         clas_data[(0,) + tuple(clas_negative) + (0,)] = 1.0
         clas_data[(0,) + tuple(clas_positive) + (1,)] = 1.0
+        reg_data[(0,) + tuple(clas_positive)] = reg_positive
 
         return {
             input_placeholder: input_data,
             clas_placeholder: clas_data,
+            reg_placeholder: reg_data
         }, last_frame
 
     def get_anchor_at(self, anchor_id, y, x):
@@ -239,44 +249,55 @@ class CaltechDataset:
                         good = False
 
                     if o['occl'] == 1:
-                        visible_pos = (o['posv'][1], o['posv'][0], o['posv'][3], o['posv'][2]) # Convert to (y, x, h, w)
-                        if visible_pos[2] * visible_pos[3] < CaltechDataset.MINIMUM_VISIBLE_RATIO * pos[2] * pos[3]:
+                        if type(o['posv']) == int:
                             good = False
-                            pos = visible_pos
+                        else:
+                            visible_pos = (o['posv'][1], o['posv'][0], o['posv'][3], o['posv'][2]) # Convert to (y, x, h, w)
+                            if visible_pos[2] * visible_pos[3] < CaltechDataset.MINIMUM_VISIBLE_RATIO * pos[2] * pos[3]:
+                                good = False
+                                pos = visible_pos
 
                 if good:
                     persons.append(pos)
                 elif CaltechDataset.USE_UNDESIRABLES:
                     undesirables.append(pos)
 
+        # Move data to numpy
+        persons = np.array(persons, dtype = np.float32)
+        undesirables = np.array(undesirables, dtype = np.float32)
+
         # Compute IoUs for positive & negative examples
-        IoUs = np.zeros((CaltechDataset.OUTPUT_SIZE[0], CaltechDataset.OUTPUT_SIZE[1], self.anchors.num, len(persons)))
-        IoUs_negatives = np.zeros((CaltechDataset.OUTPUT_SIZE[0], CaltechDataset.OUTPUT_SIZE[1], self.anchors.num, len(persons) + len(undesirables)))
+        IoUs = np.zeros((CaltechDataset.OUTPUT_SIZE[0], CaltechDataset.OUTPUT_SIZE[1], self.anchors.num, persons.shape[0]))
+        IoUs_negatives = np.zeros((CaltechDataset.OUTPUT_SIZE[0], CaltechDataset.OUTPUT_SIZE[1], self.anchors.num, persons.shape[0] + undesirables.shape[0]))
 
         # Keep track of cross boundaries anchors, to remove them from training
-        cross_boundaries = np.zeros((CaltechDataset.OUTPUT_SIZE[0], CaltechDataset.OUTPUT_SIZE[1], self.anchors.num))
+        cross_boundaries = np.zeros((CaltechDataset.OUTPUT_SIZE[0], CaltechDataset.OUTPUT_SIZE[1], self.anchors.num), dtype = np.uint8)
+
+        # Keep anchor positions for regression
+        anchor_pos = np.zeros((CaltechDataset.OUTPUT_SIZE[0], CaltechDataset.OUTPUT_SIZE[1], self.anchors.num, 4), dtype = np.float32)
 
         for y in range(CaltechDataset.OUTPUT_SIZE[0]):
             for x in range(CaltechDataset.OUTPUT_SIZE[1]):
                 for anchor_id in range(self.anchors.num):
                     pos = self.get_anchor_at(anchor_id, y, x)
+                    anchor_pos[y, x, anchor_id] = pos
 
                     if pos[0] < 0 or pos[0] + pos[2] >= CaltechDataset.INPUT_SIZE[0] or pos[1] < 0 or pos[1] + pos[3] >= CaltechDataset.INPUT_SIZE[1]:
                         cross_boundaries[y, x, anchor_id] = 1.0
 
                     maxIoU = 0.0
-                    for i in range(len(persons)):
+                    for i in range(persons.shape[0]):
                         IoUs[y, x, anchor_id, i] = IoU(pos, persons[i])
                         # IoUs_negatives[y, x, anchor_id, i] = IoU_negative(pos, persons[i])
                         IoUs_negatives[y, x, anchor_id, i] = IoU(pos, persons[i])
-                    for i in range(len(undesirables)):
-                        # IoUs_negatives[y, x, anchor_id, len(persons) + i] = IoU_negative(pos, undesirables[i])
-                        IoUs_negatives[y, x, anchor_id, len(persons) + i] = IoU(pos, undesirables[i])
+                    for i in range(undesirables.shape[0]):
+                        # IoUs_negatives[y, x, anchor_id, persons.shape[0] + i] = IoU_negative(pos, undesirables[i])
+                        IoUs_negatives[y, x, anchor_id, persons.shape[0] + i] = IoU(pos, undesirables[i])
 
         clas_data = np.zeros((CaltechDataset.OUTPUT_SIZE[0], CaltechDataset.OUTPUT_SIZE[1], self.anchors.num, 2), dtype = np.uint8) # [height, width, # anchors, 2]
 
         # Negative examples
-        if len(persons) + len(undesirables) > 0:
+        if persons.shape[0] + undesirables.shape[0] > 0:
             IoUs_negatives = np.max(IoUs_negatives, axis = 3)
 
             clas_data[IoUs_negatives <= CaltechDataset.NEGATIVE_THRESHOLD, 0] = 1.0
@@ -284,27 +305,43 @@ class CaltechDataset:
             clas_data[:, :, :, 0] = 1.0
 
         # Positive examples
-        if len(persons) > 0:
+        if persons.shape[0] > 0:
             # Set best IoU for each person above threshold to create at least a positive example
             max_idx = IoUs.reshape(-1, IoUs.shape[3]).argmax(axis = 0) # Reshape IoUs for easier computation of argmax per person
             maxs = np.column_stack(np.unravel_index(max_idx, IoUs.shape[:3])) # Compute back maxima indices in regular IoUs shape
-            for i in range(len(persons)):
+            for i in range(persons.shape[0]):
                 index = tuple(maxs[i]) + (i,)
                 IoUs[index] = 1.0
 
-            IoUs = np.max(IoUs, axis = 3)
+            max_IoUs = np.max(IoUs, axis = 3)
+            argmax_IoUS = np.argmax(IoUs, axis = 3)
 
-            clas_data[IoUs >= CaltechDataset.POSITIVE_THRESHOLD, 1] = 1.0
-            clas_data[IoUs >= CaltechDataset.POSITIVE_THRESHOLD, 0] = 0.0 # We want no overlap, so positives win over negatives
+            clas_data[max_IoUs >= CaltechDataset.POSITIVE_THRESHOLD, 1] = 1.0
+            clas_data[max_IoUs >= CaltechDataset.POSITIVE_THRESHOLD, 0] = 0.0 # We want no overlap, so positives win over negatives
 
         # Remove cross-boundaries
         clas_data[cross_boundaries == 1.0, 0] = 0.0
         clas_data[cross_boundaries == 1.0, 1] = 0.0
 
+        # Compute regression for final positive examples
+        if persons.shape[0] > 0:
+            positive_anchor_pos = anchor_pos[clas_data[:, :, :, 1] == 1.0]
+            argmax_IoUS = argmax_IoUS[clas_data[:, :, :, 1] == 1.0]
+            positive_person_pos = persons[argmax_IoUS]
+
+            reg_positive = np.zeros(positive_anchor_pos.shape, dtype = np.float32)
+            reg_positive[:, 0] = (positive_person_pos[:, 0] - positive_anchor_pos[:, 0]) / positive_anchor_pos[:, 2] # t_y = (y - y_a) / h_a
+            reg_positive[:, 1] = (positive_person_pos[:, 1] - positive_anchor_pos[:, 1]) / positive_anchor_pos[:, 3] # t_x = (x - x_a) / w_a
+            reg_positive[:, 2] = np.log(positive_person_pos[:, 2] / positive_anchor_pos[:, 2]) # t_h = log(h / h_a)
+            reg_positive[:, 3] = np.log(positive_person_pos[:, 3] / positive_anchor_pos[:, 3]) # t_w = log(w / w_a)
+        else:
+            reg_positive = np.zeros((0, 4), dtype = np.float32)
+
         clas_negative = np.where(clas_data[:, :, :, 0] == 1.0)
         np.save(self.dataset_location + '/prepared/set{:02d}/V{:03d}.seq/{}.negative.npy'.format(set_number, seq_number, frame_number), clas_negative)
         clas_positive = np.where(clas_data[:, :, :, 1] == 1.0)
         np.save(self.dataset_location + '/prepared/set{:02d}/V{:03d}.seq/{}.positive.npy'.format(set_number, seq_number, frame_number), clas_positive)
+        np.save(self.dataset_location + '/prepared/set{:02d}/V{:03d}.seq/{}.reg.npy'.format(set_number, seq_number, frame_number), reg_positive)
 
     def show_frame(self, set_number, seq_number, frame_number):
         self.load_annotations() # Will be needed
@@ -334,10 +371,13 @@ class CaltechDataset:
                         good = False
 
                     if o['occl'] == 1:
-                        visible_pos = (o['posv'][1], o['posv'][0], o['posv'][3], o['posv'][2]) # Convert to (y, x, h, w)
-                        if visible_pos[2] * visible_pos[3] < CaltechDataset.MINIMUM_VISIBLE_RATIO * pos[2] * pos[3]:
+                        if type(o['posv']) == int:
                             good = False
-                            pos = visible_pos
+                        else:
+                            visible_pos = (o['posv'][1], o['posv'][0], o['posv'][3], o['posv'][2]) # Convert to (y, x, h, w)
+                            if visible_pos[2] * visible_pos[3] < CaltechDataset.MINIMUM_VISIBLE_RATIO * pos[2] * pos[3]:
+                                good = False
+                                pos = visible_pos
 
                     if good:
                         dr.rectangle((pos[1], pos[0], pos[1] + pos[3], pos[0] + pos[2]), outline = 'blue')
@@ -388,10 +428,13 @@ class CaltechDataset:
                         good = False
 
                     if o['occl'] == 1:
-                        visible_pos = (o['posv'][1], o['posv'][0], o['posv'][3], o['posv'][2]) # Convert to (y, x, h, w)
-                        if visible_pos[2] * visible_pos[3] < CaltechDataset.MINIMUM_VISIBLE_RATIO * pos[2] * pos[3]:
+                        if type(o['posv']) == int:
                             good = False
-                            pos = visible_pos
+                        else:
+                            visible_pos = (o['posv'][1], o['posv'][0], o['posv'][3], o['posv'][2]) # Convert to (y, x, h, w)
+                            if visible_pos[2] * visible_pos[3] < CaltechDataset.MINIMUM_VISIBLE_RATIO * pos[2] * pos[3]:
+                                good = False
+                                pos = visible_pos
 
                     if good:
                         dr.rectangle((pos[1], pos[0], pos[1] + pos[3], pos[0] + pos[2]), outline = 'blue')
@@ -416,14 +459,15 @@ class CaltechDataset:
         image.show()
 
     def is_frame_prepared(self, set_number, seq_number, frame_number):
-        return os.path.isfile(self.dataset_location + '/prepared/set{:02d}/V{:03d}.seq/{}.input.npy'.format(set_number, seq_number, frame_number)) and os.path.isfile(self.dataset_location + '/prepared/set{:02d}/V{:03d}.seq/{}.negative.npy'.format(set_number, seq_number, frame_number)) and os.path.isfile(self.dataset_location + '/prepared/set{:02d}/V{:03d}.seq/{}.positive.npy'.format(set_number, seq_number, frame_number))
+        return os.path.isfile(self.dataset_location + '/prepared/set{:02d}/V{:03d}.seq/{}.input.npy'.format(set_number, seq_number, frame_number)) and os.path.isfile(self.dataset_location + '/prepared/set{:02d}/V{:03d}.seq/{}.negative.npy'.format(set_number, seq_number, frame_number)) and os.path.isfile(self.dataset_location + '/prepared/set{:02d}/V{:03d}.seq/{}.positive.npy'.format(set_number, seq_number, frame_number)) and os.path.isfile(self.dataset_location + '/prepared/set{:02d}/V{:03d}.seq/{}.reg.npy'.format(set_number, seq_number, frame_number))
 
     def load_frame(self, set_number, seq_number, frame_number):
         input_data = np.load(self.dataset_location + '/prepared/set{:02d}/V{:03d}.seq/{}.input.npy'.format(set_number, seq_number, frame_number))
         clas_negative = np.load(self.dataset_location + '/prepared/set{:02d}/V{:03d}.seq/{}.negative.npy'.format(set_number, seq_number, frame_number))
         clas_positive = np.load(self.dataset_location + '/prepared/set{:02d}/V{:03d}.seq/{}.positive.npy'.format(set_number, seq_number, frame_number))
+        reg_positive = np.load(self.dataset_location + '/prepared/set{:02d}/V{:03d}.seq/{}.reg.npy'.format(set_number, seq_number, frame_number))
 
-        return input_data, clas_negative, clas_positive
+        return input_data, clas_negative, clas_positive, reg_positive
 
     def prepare(self):
         for minibatch in self.training + self.validation + self.testing:
@@ -432,16 +476,19 @@ class CaltechDataset:
 
 if __name__ == '__main__':
     caltech = CaltechDataset('dataset')
-    caltech.prepare()
-    caltech.show_frame(*caltech.training[0])
+    # caltech.prepare()
+    # caltech.show_frame(*caltech.training[0])
+    caltech.get_training_minibatch(0, 1)
+    exit(1)
 
     # Some statistics on the sets used
     num_negatives = 0
     num_positives = 0
     for minibatch in caltech.training:
-        input_data, clas_negative, clas_positive = caltech.load_frame(*minibatch)
+        input_data, clas_negative, clas_positive, reg_positive = caltech.load_frame(*minibatch)
         num_negatives += clas_negative.shape[1]
         num_positives += clas_positive.shape[1]
+    print('Training set:')
     print('Positive examples: {}'.format(num_positives))
     print('Negative examples: {}'.format(num_negatives))
     print('Ratio: {}'.format(float(num_positives) / float(num_positives + num_negatives)))
@@ -449,9 +496,10 @@ if __name__ == '__main__':
     num_negatives = 0
     num_positives = 0
     for minibatch in caltech.validation:
-        input_data, clas_negative, clas_positive = caltech.load_frame(*minibatch)
+        input_data, clas_negative, clas_positive, reg_positive = caltech.load_frame(*minibatch)
         num_negatives += clas_negative.shape[1]
         num_positives += clas_positive.shape[1]
+    print('Validation set:')
     print('Positive examples: {}'.format(num_positives))
     print('Negative examples: {}'.format(num_negatives))
     print('Ratio: {}'.format(float(num_positives) / float(num_positives + num_negatives)))
@@ -459,9 +507,10 @@ if __name__ == '__main__':
     num_negatives = 0
     num_positives = 0
     for minibatch in caltech.testing:
-        input_data, clas_negative, clas_positive = caltech.load_frame(*minibatch)
+        input_data, clas_negative, clas_positive, reg_positive = caltech.load_frame(*minibatch)
         num_negatives += clas_negative.shape[1]
         num_positives += clas_positive.shape[1]
+    print('Testing set:')
     print('Positive examples: {}'.format(num_positives))
     print('Negative examples: {}'.format(num_negatives))
     print('Ratio: {}'.format(float(num_positives) / float(num_positives + num_negatives)))

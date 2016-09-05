@@ -36,13 +36,19 @@ def RPN(X, num_anchors, training = False):
             clas_layer = tf.nn.bias_add(tf.nn.conv2d(l2, get_weights([1, 1, 4096, 2 * num_anchors]), strides = [1, 1, 1, 1], padding = 'SAME'),
                             get_biases([2 * num_anchors]))
 
-    return clas_layer
+        # And a classification layer
+        with tf.variable_scope('reg'): # Regression layer, 1x1 depth 4 * num_anchors
+            reg_layer = tf.nn.bias_add(tf.nn.conv2d(l2, get_weights([1, 1, 4096, 4 * num_anchors]), strides = [1, 1, 1, 1], padding = 'SAME'),
+                            get_biases([4 * num_anchors]))
 
-def create_train_summaries(learning_rate, clas_loss, rpn_loss, clas_accuracy, clas_positive_percentage, clas_positive_accuracy, VGG16D_activations, clas_activations):
+    return clas_layer, reg_layer
+
+def create_train_summaries(learning_rate, clas_loss, reg_loss, rpn_loss, clas_accuracy, clas_positive_percentage, clas_positive_accuracy, VGG16D_activations, clas_activations):
     with tf.name_scope('train'):
         learning_rate_summary = tf.scalar_summary('learning_rate', learning_rate)
 
         loss_clas_summary = tf.scalar_summary('loss/clas', clas_loss)
+        loss_reg_summary = tf.scalar_summary('loss/reg', reg_loss)
         loss_rpn_summary = tf.scalar_summary('loss/rpn', rpn_loss)
 
         stat_accuracy_summary = tf.scalar_summary('stat/accuracy', clas_accuracy)
@@ -52,7 +58,7 @@ def create_train_summaries(learning_rate, clas_loss, rpn_loss, clas_accuracy, cl
         VGG16D_histogram = tf.histogram_summary('activations/VGG16D', VGG16D_activations)
         clas_histogram = tf.histogram_summary('activations/clas', clas_activations)
 
-        return tf.merge_summary([learning_rate_summary, loss_clas_summary, loss_rpn_summary, stat_accuracy_summary, stat_positive_percentage_summary, stat_positive_accuracy_summary, VGG16D_histogram, clas_histogram])
+        return tf.merge_summary([learning_rate_summary, loss_clas_summary, loss_reg_summary, loss_rpn_summary, stat_accuracy_summary, stat_positive_percentage_summary, stat_positive_accuracy_summary, VGG16D_histogram, clas_histogram])
 
 def compute_test_stats(test_placeholders, confusion_matrix):
     print('Confusion matrix:\n{}'.format(confusion_matrix))
@@ -105,7 +111,7 @@ def create_test_summaries(test_placeholders):
 
         return tf.merge_summary([accuracy_summary, positive_recall_summary, negative_recall_summary, recall_summary, positive_precision_summary, negative_precision_summary,precision_summary, F_score_summary])
 
-def trainer(caltech, input_placeholder, clas_placeholder):
+def trainer(caltech, input_placeholder, clas_placeholder, reg_placeholder):
     # Shared CNN
     input_data = tf.cast(input_placeholder, tf.float32)
 
@@ -113,20 +119,36 @@ def trainer(caltech, input_placeholder, clas_placeholder):
     shared_cnn = vgg.build(input_data)
 
     # RPN
-    clas_rpn = RPN(shared_cnn, caltech.anchors.num)
+    clas_rpn, reg_rpn = RPN(shared_cnn, caltech.anchors.num)
     clas_rpn = tf.reshape(clas_rpn, [-1, 2]) # Reshape to a big list
+    reg_rpn = tf.reshape(reg_rpn, [-1, 4]) # Reshape to a big list
 
     # Get classification truth, to be used to learn the regression only on positive examples
     clas_truth = tf.reshape(tf.cast(clas_placeholder, tf.float32), [-1, 2]) # Reshape to a big list
     clas_examples = tf.reduce_sum(clas_truth, reduction_indices = 1) # All examples (positive or negative, but not unknown) set to 1.0
     clas_positive_examples = tf.squeeze(tf.slice(clas_truth, [0, 1], [-1, 1])) # Only positive examples set to 1.0
 
+    # Get regression truth
+    reg_truth = tf.reshape(tf.cast(reg_placeholder, tf.float32), [-1, 4]) # Reshape to a big list
+
     # Declare loss functions
     clas_loss = tf.nn.softmax_cross_entropy_with_logits(clas_rpn, clas_truth)
-    clas_loss = tf.reduce_sum(tf.mul(clas_loss, clas_examples))
+    clas_positive_ratio = tf.Variable(50.0, trainable = False, name = 'clas_positive_ratio')
+    clas_loss = tf.reduce_sum((tf.mul(clas_loss, clas_examples) + (clas_positive_ratio - 1.0) * tf.mul(clas_loss, clas_positive_examples)) / clas_positive_ratio)
     clas_loss = tf.div(clas_loss, tf.reduce_sum(clas_examples)) # Normalization
 
-    rpn_loss = clas_loss
+    reg_loss = tf.abs(tf.sub(reg_rpn, reg_truth))
+    # This is Smooth L1 as defined in http://www.cv-foundation.org/openaccess/content_iccv_2015/papers/Girshick_Fast_R-CNN_ICCV_2015_paper.pdf
+    # 0.5 * x^2 if |x| < 1
+    # |x| - 0.5 otherwise
+    reg_loss = tf.select(tf.less(reg_loss, 1), tf.mul(tf.square(reg_loss), 0.5), tf.sub(reg_loss, 0.5))
+    reg_loss = tf.reduce_sum(reg_loss, reduction_indices = 1)
+    reg_loss = tf.mul(reg_loss, clas_positive_examples) # Only care for positive examples
+    reg_loss = tf.reduce_mean(reg_loss) # Normalization
+    lambda_ = tf.Variable(10.0, trainable = False, name = 'lambda')
+    reg_loss = tf.mul(reg_loss, lambda_) # Scaling
+
+    rpn_loss = tf.add(clas_loss, reg_loss)
 
     # Diagnostic statistics
     clas_answer = tf.argmax(clas_truth, 1)
@@ -153,7 +175,7 @@ def trainer(caltech, input_placeholder, clas_placeholder):
     test_steps = [clas_examples, clas_answer, clas_guess, clas_prob]
 
     # Creating summaries
-    train_summaries = create_train_summaries(learning_rate, clas_loss, rpn_loss, clas_accuracy, clas_positive_percentage, clas_positive_accuracy, shared_cnn, clas_rpn)
+    train_summaries = create_train_summaries(learning_rate, clas_loss, reg_loss, rpn_loss, clas_accuracy, clas_positive_percentage, clas_positive_accuracy, shared_cnn, clas_rpn)
 
     return global_step, learning_rate, train_step, train_summaries, test_steps, vgg
 
@@ -177,9 +199,10 @@ if __name__ == '__main__':
     ### Declare input & output ###
     input_placeholder = tf.placeholder(tf.uint8, [None, caltech.INPUT_SIZE[0], caltech.INPUT_SIZE[1], 3]) # 640x480 images, RGB (depth 3)
     clas_placeholder = tf.placeholder(tf.uint8, [None, caltech.OUTPUT_SIZE[0], caltech.OUTPUT_SIZE[1], caltech.anchors.num, 2])
+    reg_placeholder = tf.placeholder(tf.uint8, [None, caltech.OUTPUT_SIZE[0], caltech.OUTPUT_SIZE[1], caltech.anchors.num, 4])
 
     ### Creating the trainer ###
-    global_step, learning_rate, train_step, train_summaries, test_steps, vgg = trainer(caltech, input_placeholder, clas_placeholder)
+    global_step, learning_rate, train_step, train_summaries, test_steps, vgg = trainer(caltech, input_placeholder, clas_placeholder, reg_placeholder)
 
     ### Creating test summaries ###
     test_placeholders = [tf.placeholder(tf.float32) for i in range(8)]
@@ -194,7 +217,7 @@ if __name__ == '__main__':
         tf.initialize_all_variables().run()
 
         vgg_restore_path = 'vgg16/VGG16D.ckpt'
-        full_restore_path = None # 'trained-model.ckpt'
+        full_restore_path = None # 'models/2016-09-02-64minibatch-500posratio-norelu/current-model.ckpt'
 
         if full_restore_path:
             # Restore variables from disk.
@@ -215,8 +238,9 @@ if __name__ == '__main__':
             last_epoch = 0
             max_epochs = 15
             confusion_matrix = np.zeros((2, 2), dtype = np.int64) # Truth as rows, guess as columns
+            print('#### EPOCH {:02d} ####'.format(last_epoch))
             while caltech.epoch < max_epochs:
-                results = sess.run([train_step, train_summaries] + test_steps, feed_dict = caltech.get_training_minibatch(input_placeholder, clas_placeholder))
+                results = sess.run([train_step, train_summaries] + test_steps, feed_dict = caltech.get_training_minibatch(input_placeholder, clas_placeholder, reg_placeholder))
                 train_writer.add_summary(results[1], global_step = tf.train.global_step(sess, global_step))
 
                 confusion_matrix = accumulate_confusion_matrix(confusion_matrix, results[2], results[3], results[4])
@@ -233,7 +257,7 @@ if __name__ == '__main__':
                     confusion_matrix = np.zeros((2, 2), dtype = np.int64)
                     last_frame = False
                     while not last_frame:
-                        feed_dict, last_frame = caltech.get_validation_minibatch(input_placeholder, clas_placeholder)
+                        feed_dict, last_frame = caltech.get_validation_minibatch(input_placeholder, clas_placeholder, reg_placeholder)
                         results = sess.run(test_steps, feed_dict = feed_dict)
 
                         confusion_matrix = accumulate_confusion_matrix(confusion_matrix, results[0], results[1], results[2])
@@ -244,6 +268,8 @@ if __name__ == '__main__':
                     # Reset for training accumulation
                     confusion_matrix = np.zeros((2, 2), dtype = np.int64)
 
+                    print('#### EPOCH {:02d} ####'.format(last_epoch))
+
             # Save the model to disk
             save_path = full_saver.save(sess, 'current-model.ckpt')
             print('Model saved in file: {}'.format(save_path))
@@ -253,7 +279,7 @@ if __name__ == '__main__':
         confusion_matrix = np.zeros((2, 2), dtype = np.int64)
         last_frame = False
         while not last_frame:
-            feed_dict, last_frame = caltech.get_testing_minibatch(input_placeholder, clas_placeholder)
+            feed_dict, last_frame = caltech.get_testing_minibatch(input_placeholder, clas_placeholder, reg_placeholder)
             results = sess.run(test_steps, feed_dict = feed_dict)
 
             confusion_matrix = accumulate_confusion_matrix(confusion_matrix, results[0], results[1], results[2])
