@@ -138,14 +138,13 @@ def trainer(caltech, input_placeholder, clas_placeholder, reg_placeholder):
     clas_loss = tf.div(clas_loss, tf.reduce_sum(clas_examples)) # Normalization
 
     reg_loss = tf.abs(tf.sub(reg_rpn, reg_truth))
-    # This is Smooth L1 as defined in http://www.cv-foundation.org/openaccess/content_iccv_2015/papers/Girshick_Fast_R-CNN_ICCV_2015_paper.pdf
-    # 0.5 * x^2 if |x| < 1
-    # |x| - 0.5 otherwise
+    # # This is Smooth L1 as defined in http://www.cv-foundation.org/openaccess/content_iccv_2015/papers/Girshick_Fast_R-CNN_ICCV_2015_paper.pdf
+    # # 0.5 * x^2 if |x| < 1
+    # # |x| - 0.5 otherwise
     reg_loss = tf.select(tf.less(reg_loss, 1), tf.mul(tf.square(reg_loss), 0.5), tf.sub(reg_loss, 0.5))
     reg_loss = tf.reduce_sum(reg_loss, reduction_indices = 1)
-    reg_loss = tf.mul(reg_loss, clas_positive_examples) # Only care for positive examples
-    reg_loss = tf.reduce_mean(reg_loss) # Normalization
-    lambda_ = tf.Variable(10.0, trainable = False, name = 'lambda')
+    reg_loss = tf.reduce_mean(tf.mul(reg_loss, clas_positive_examples))
+    lambda_ = tf.Variable(100.0, trainable = False, name = 'lambda') # Roughly reg_loss & clas_loss are equal, because 100.0 ~ 6000 (num total anchors) / 64 (minibatch size)
     reg_loss = tf.mul(reg_loss, lambda_) # Scaling
 
     rpn_loss = tf.add(clas_loss, reg_loss)
