@@ -236,10 +236,9 @@ if __name__ == '__main__':
         if not full_restore_path:
             # Train the model first (and save it)
             last_epoch = 0
-            max_epochs = 15
             confusion_matrix = np.zeros((2, 2), dtype = np.int64) # Truth as rows, guess as columns
             print('#### EPOCH {:02d} ####'.format(last_epoch))
-            while caltech.epoch < max_epochs:
+            while caltech.epoch < CaltechDataset.MAX_EPOCHS:
                 results = sess.run([train_step, train_summaries] + test_steps, feed_dict = caltech.get_training_minibatch(input_placeholder, clas_placeholder, reg_placeholder))
                 train_writer.add_summary(results[1], global_step = tf.train.global_step(sess, global_step))
 

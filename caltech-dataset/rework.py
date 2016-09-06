@@ -44,10 +44,12 @@ class CaltechDataset:
 
     ### Parameters controlling the size of training, validation & testing sets ###
     RANDOM_SEED = 64464 # Used for selecting reproducable subsets
-    TRAINING_SIZE = 100 # Number of testing frames kept from all available
+    TRAINING_SIZE = 400 # Number of testing frames kept from all available
     VALIDATION_RATIO = 1.0 / 3.0 # Ratio of training data kept for validation
-    TESTING_SIZE = 100 # Number of testing frames kept from all available
+    TESTING_SIZE = 400 # Number of testing frames kept from all available
     FRAME_MODULO = 30 # Modulo for selecting frames from sequences in testing
+
+    MAX_EPOCHS = 4
 
     ### Parameters controlling how the classification is created ###
     MINIMUM_VISIBLE_RATIO = 0.5 # Minimum ratio of area visible for occluded objects to be included
