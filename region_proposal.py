@@ -133,7 +133,7 @@ def trainer(caltech, input_placeholder, clas_placeholder, reg_placeholder):
 
     # Declare loss functions
     clas_loss = tf.nn.softmax_cross_entropy_with_logits(clas_rpn, clas_truth)
-    clas_positive_ratio = tf.Variable(50.0, trainable = False, name = 'clas_positive_ratio')
+    clas_positive_ratio = tf.Variable(25.0, trainable = False, name = 'clas_positive_ratio')
     clas_loss = tf.reduce_sum((tf.mul(clas_loss, clas_examples) + (clas_positive_ratio - 1.0) * tf.mul(clas_loss, clas_positive_examples)) / clas_positive_ratio)
     clas_loss = tf.div(clas_loss, tf.reduce_sum(clas_examples)) # Normalization
 
@@ -171,7 +171,7 @@ def trainer(caltech, input_placeholder, clas_placeholder, reg_placeholder):
     train_step = tf.train.MomentumOptimizer(learning_rate, 0.9).minimize(rpn_loss,
                                                        global_step = global_step)
 
-    test_steps = [clas_examples, clas_answer, clas_guess, clas_prob]
+    test_steps = [clas_examples, clas_answer, clas_guess, clas_prob, reg_rpn]
 
     # Creating summaries
     train_summaries = create_train_summaries(learning_rate, clas_loss, reg_loss, rpn_loss, clas_accuracy, clas_positive_percentage, clas_positive_accuracy, shared_cnn, clas_rpn)
@@ -216,7 +216,7 @@ if __name__ == '__main__':
         tf.initialize_all_variables().run()
 
         vgg_restore_path = 'vgg16/VGG16D.ckpt'
-        full_restore_path = None # 'models/2016-09-02-64minibatch-500posratio-norelu/current-model.ckpt'
+        full_restore_path = None # 'models/2016-09-05-64minibatch-25posratio-norelu-withreg-400training/current-model.ckpt'
 
         if full_restore_path:
             # Restore variables from disk.
@@ -277,10 +277,14 @@ if __name__ == '__main__':
         confusion_matrix = np.zeros((2, 2), dtype = np.int64)
         last_frame = False
         while not last_frame:
-            feed_dict, last_frame = caltech.get_testing_minibatch(input_placeholder, clas_placeholder, reg_placeholder)
+            feed_dict, minibatch_used, last_frame = caltech.get_testing_minibatch(input_placeholder, clas_placeholder, reg_placeholder)
             results = sess.run(test_steps, feed_dict = feed_dict)
 
             confusion_matrix = accumulate_confusion_matrix(confusion_matrix, results[0], results[1], results[2])
+
+            clas_guess, guess_pos, guess_scores = caltech.parse_results(results[2], results[3], results[4])
+            final_pos, final_scores = caltech.NMS(guess_pos, guess_scores)
+            caltech.save_results(minibatch_used[0], minibatch_used[1], minibatch_used[2], final_pos, final_scores)
 
         results = sess.run(test_summaries, feed_dict = compute_test_stats(test_placeholders, confusion_matrix))
         test_writer.add_summary(results, global_step = tf.train.global_step(sess, global_step))

@@ -58,6 +58,10 @@ class CaltechDataset:
     NEGATIVE_THRESHOLD = 0.3
     POSITIVE_THRESHOLD = 0.7
 
+    ### Parameters controlling the final output ###
+    NMS_IOU_THRESHOLD = 0.0
+    NMS_TOP_N = 20 # Kept after NMS
+
     ### Parameters controlling how examples are fed while training ###
     MINIBATCH_SIZE = 64 # Number of examples (positive, negative or neither) used per image as a minibatch
 
@@ -101,16 +105,23 @@ class CaltechDataset:
         for set_number in range(5 + 1):
             training += self.discover_set(set_number, skip_frames = False)
 
-        random.seed(CaltechDataset.RANDOM_SEED) # For reproducibility
-        self.set_training([training[i] for i in sorted(random.sample(range(len(training)), CaltechDataset.TRAINING_SIZE))])
+        if CaltechDataset.TRAINING_SIZE == -1:
+            self.set_training(training)
+        else:
+            random.seed(CaltechDataset.RANDOM_SEED) # For reproducibility
+            self.set_training([training[i] for i in sorted(random.sample(range(len(training)), CaltechDataset.TRAINING_SIZE))])
 
     def discover_testing(self):
         testing = []
         for set_number in range(6, 10 + 1):
             testing += self.discover_set(set_number, skip_frames = True)
 
-        random.seed(CaltechDataset.RANDOM_SEED) # For reproducibility
-        self.testing = [testing[i] for i in sorted(random.sample(range(len(testing)), CaltechDataset.TESTING_SIZE))]
+        if CaltechDataset.TESTING_SIZE == -1:
+            self.testing = testing
+        else:
+            random.seed(CaltechDataset.RANDOM_SEED) # For reproducibility
+            self.testing = [testing[i] for i in sorted(random.sample(range(len(testing)), CaltechDataset.TESTING_SIZE))]
+
         print('{} testing examples kept (out of {})'.format(len(self.testing), len(testing)))
 
     def set_training(self, training):
@@ -184,7 +195,8 @@ class CaltechDataset:
         }, last_frame
 
     def get_testing_minibatch(self, input_placeholder, clas_placeholder, reg_placeholder):
-        input_data, clas_negative, clas_positive, reg_positive = self.load_frame(*self.testing[self.testing_minibatch])
+        minibatch_used = self.testing[self.testing_minibatch]
+        input_data, clas_negative, clas_positive, reg_positive = self.load_frame(*minibatch_used)
         self.testing_minibatch = self.testing_minibatch + 1
         if self.testing_minibatch == len(self.testing):
             self.testing_minibatch = 0
@@ -203,7 +215,7 @@ class CaltechDataset:
             input_placeholder: input_data,
             clas_placeholder: clas_data,
             reg_placeholder: reg_data
-        }, last_frame
+        }, minibatch_used, last_frame
 
     def get_anchor_at(self, anchor_id, y, x):
         center_y = CaltechDataset.OUTPUT_CELL_SIZE * (float(y) + 0.5)
@@ -223,6 +235,101 @@ class CaltechDataset:
 
         with open(self.dataset_location + '/annotations.json') as json_file:
             self.annotations = json.load(json_file)
+
+    def parametrize(self, person_pos, anchor_pos):
+        reg = np.zeros(anchor_pos.shape, dtype = np.float32)
+        reg[:, 0] = (person_pos[:, 0] - anchor_pos[:, 0]) / anchor_pos[:, 2] # t_y = (y - y_a) / h_a
+        reg[:, 1] = (person_pos[:, 1] - anchor_pos[:, 1]) / anchor_pos[:, 3] # t_x = (x - x_a) / w_a
+        reg[:, 2] = np.log(person_pos[:, 2] / anchor_pos[:, 2]) # t_h = log(h / h_a)
+        reg[:, 3] = np.log(person_pos[:, 3] / anchor_pos[:, 3]) # t_w = log(w / w_a)
+
+        return reg
+
+    def unparametrize(self, reg_pos, anchor_pos):
+        guess_pos = np.zeros(anchor_pos.shape, dtype = np.float32)
+        guess_pos[:, 0] = anchor_pos[:, 2] * reg_pos[:, 0] + anchor_pos[:, 0] # y = h_a * t_y + y_a
+        guess_pos[:, 1] = anchor_pos[:, 3] * reg_pos[:, 1] + anchor_pos[:, 1] # x = w_a * t_x + x_a
+        guess_pos[:, 2] = anchor_pos[:, 2] * np.exp(reg_pos[:, 2]) # h = h_a * exp(t_h)
+        guess_pos[:, 3] = anchor_pos[:, 3] * np.exp(reg_pos[:, 3]) # w = w_a * exp(t_w)
+
+        # Clip to boundaries
+
+        current = guess_pos[:, 0] < 0 # y < 0
+        guess_pos[current, 2] += guess_pos[current , 0] # h += y
+        guess_pos[current, 0] = 0 # y = 0
+
+        current = guess_pos[:, 0] >= CaltechDataset.INPUT_SIZE[0] # y >= CaltechDataset.INPUT_SIZE[0]
+        guess_pos[current, 2] = 0 # h = 0
+        guess_pos[current, 0] = CaltechDataset.INPUT_SIZE[0] - 1 # y = CaltechDataset.INPUT_SIZE[0] - 1
+
+        current = guess_pos[:, 2] < 0 # h < 0
+        guess_pos[current, 2] = 0 # h = 0
+
+        current = guess_pos[:, 0] + guess_pos[:, 2] >= CaltechDataset.INPUT_SIZE[0] # y + h >= CaltechDataset.INPUT_SIZE[0]
+        guess_pos[current, 2] = (CaltechDataset.INPUT_SIZE[0] - 1) - guess_pos[current, 0] # h = (CaltechDataset.INPUT_SIZE[0] - 1) - y
+
+        current = guess_pos[:, 1] < 0 # x < 0
+        guess_pos[current, 3] += guess_pos[current, 1] # w += x
+        guess_pos[current, 1] = 0 # x = 0
+
+        current = guess_pos[:, 1] >= CaltechDataset.INPUT_SIZE[1] # x >= CaltechDataset.INPUT_SIZE[1]
+        guess_pos[current, 3] = 0 # w = 0
+        guess_pos[current, 1] = CaltechDataset.INPUT_SIZE[1] - 1 # x = CaltechDataset.INPUT_SIZE[1] - 1
+
+        current = guess_pos[:, 3] < 0 # w < 0
+        guess_pos[current, 3] = 0 # w = 0
+
+        current = guess_pos[:, 1] + guess_pos[:, 3] >= CaltechDataset.INPUT_SIZE[1] # x + w >= CaltechDataset.INPUT_SIZE[1]
+        guess_pos[current, 3] = (CaltechDataset.INPUT_SIZE[1] - 1) - guess_pos[current, 1] # w = (CaltechDataset.INPUT_SIZE[1] - 1) - x
+
+        return guess_pos
+
+    def parse_results(self, clas_guess, clas_prob, reg_guess):
+        clas_guess = clas_guess.reshape((CaltechDataset.OUTPUT_SIZE[0], CaltechDataset.OUTPUT_SIZE[1], self.anchors.num))
+        clas_prob = clas_prob.reshape((CaltechDataset.OUTPUT_SIZE[0], CaltechDataset.OUTPUT_SIZE[1], self.anchors.num, 2))
+        reg_guess = reg_guess.reshape((CaltechDataset.OUTPUT_SIZE[0], CaltechDataset.OUTPUT_SIZE[1], self.anchors.num, 4))
+
+        anchor_pos = np.zeros(reg_guess.shape, dtype = np.float32)
+        for y in range(CaltechDataset.OUTPUT_SIZE[0]):
+            for x in range(CaltechDataset.OUTPUT_SIZE[1]):
+                for anchor_id in range(self.anchors.num):
+                    pos = self.get_anchor_at(anchor_id, y, x)
+                    anchor_pos[y, x, anchor_id] = pos
+
+        positive_reg_pos = reg_guess[clas_guess[:, :, :] == 1.0]
+        positive_anchor_pos = anchor_pos[clas_guess[:, :, :] == 1.0]
+        guess_pos = self.unparametrize(positive_reg_pos, positive_anchor_pos)
+
+        guess_scores = clas_prob[clas_guess[:, :, :] == 1.0, 1]
+
+        # Remove guesses where h or w equals 0
+        current = guess_pos[:, 2] != 0 # h = 0
+        guess_pos = guess_pos[current]
+        guess_scores = guess_scores[current]
+
+        current = guess_pos[:, 3] != 0 # w = 0
+        guess_pos = guess_pos[current]
+        guess_scores = guess_scores[current]
+
+        return clas_guess, guess_pos, guess_scores
+
+    def NMS(self, guess_pos, guess_scores):
+        index = np.argsort(guess_scores[:])[::-1] # Decreasing order with [::-1]
+
+        final_pos = np.zeros((0, 4))
+        final_scores = []
+        while len(index) > 0 and len(final_scores) < CaltechDataset.NMS_TOP_N:
+            final_pos = np.vstack([final_pos, guess_pos[index[0]]])
+            final_scores.append(guess_scores[index[0]])
+
+            to_keep = []
+            for i in range(1, len(index)):
+                if IoU(guess_pos[index[0]], guess_pos[index[i]]) <= CaltechDataset.NMS_IOU_THRESHOLD:
+                    to_keep.append(i)
+
+            index = index[to_keep]
+
+        return final_pos, np.array(final_scores)
 
     def prepare_frame(self, set_number, seq_number, frame_number):
         self.load_annotations() # Will be needed
@@ -337,11 +444,7 @@ class CaltechDataset:
             argmax_IoUS = argmax_IoUS[clas_data[:, :, :, 1] == 1.0]
             positive_person_pos = persons[argmax_IoUS]
 
-            reg_positive = np.zeros(positive_anchor_pos.shape, dtype = np.float32)
-            reg_positive[:, 0] = (positive_person_pos[:, 0] - positive_anchor_pos[:, 0]) / positive_anchor_pos[:, 2] # t_y = (y - y_a) / h_a
-            reg_positive[:, 1] = (positive_person_pos[:, 1] - positive_anchor_pos[:, 1]) / positive_anchor_pos[:, 3] # t_x = (x - x_a) / w_a
-            reg_positive[:, 2] = np.log(positive_person_pos[:, 2] / positive_anchor_pos[:, 2]) # t_h = log(h / h_a)
-            reg_positive[:, 3] = np.log(positive_person_pos[:, 3] / positive_anchor_pos[:, 3]) # t_w = log(w / w_a)
+            reg_positive = self.parametrize(positive_person_pos, positive_anchor_pos)
         else:
             reg_positive = np.zeros((0, 4), dtype = np.float32)
 
@@ -408,12 +511,8 @@ class CaltechDataset:
 
         image.show()
 
-    def show_results(self, set_number, seq_number, frame_number, clas_guess):
+    def show_results(self, set_number, seq_number, frame_number, clas_guess, guess_pos):
         self.load_annotations() # Will be needed
-
-        # Check the frame was prepared
-        if not self.is_frame_prepared(set_number, seq_number, frame_number):
-            self.prepare_frame(set_number, seq_number, frame_number)
 
         image = Image.open(self.dataset_location + '/images/set{:02d}/V{:03d}.seq/{}.jpg'.format(set_number, seq_number, frame_number))
         dr = ImageDraw.Draw(image)
@@ -451,20 +550,31 @@ class CaltechDataset:
                 else:
                     dr.rectangle((pos[1], pos[0], pos[1] + pos[3], pos[0] + pos[2]), outline = 'black')
 
-        clas_guess = clas_guess.reshape((CaltechDataset.OUTPUT_SIZE[0], CaltechDataset.OUTPUT_SIZE[1], self.anchors.num))
-
         for y in range(clas_guess.shape[0]):
             for x in range(clas_guess.shape[1]):
                 for anchor_id in range(clas_guess.shape[2]):
-                    pos = self.get_anchor_at(anchor_id, y, x)
-
                     if clas_guess[y, x, anchor_id] == 0.0: # Negative
                         dr.rectangle((CaltechDataset.OUTPUT_CELL_SIZE * x, CaltechDataset.OUTPUT_CELL_SIZE * y, CaltechDataset.OUTPUT_CELL_SIZE * (x+1) - 1, CaltechDataset.OUTPUT_CELL_SIZE * (y+1) - 1), outline = 'red')
                     else: # Positive
                         dr.rectangle((CaltechDataset.OUTPUT_CELL_SIZE * x, CaltechDataset.OUTPUT_CELL_SIZE * y, CaltechDataset.OUTPUT_CELL_SIZE * (x+1) - 1, CaltechDataset.OUTPUT_CELL_SIZE * (y+1) - 1), outline = 'green')
-                        dr.rectangle((pos[1], pos[0], pos[1] + pos[3], pos[0] + pos[2]), outline = 'green')
+
+        for row in range(guess_pos.shape[0]):
+            pos = guess_pos[row]
+            dr.rectangle((pos[1], pos[0], pos[1] + pos[3], pos[0] + pos[2]), outline = 'green')
 
         image.show()
+
+    def save_results(self, set_number, seq_number, frame_number, guess_pos, guess_scores):
+        # For saving
+        if not os.path.isdir(self.dataset_location + '/results/set{:02d}/V{:03d}'.format(set_number, seq_number)):
+            os.makedirs(self.dataset_location + '/results/set{:02d}/V{:03d}'.format(set_number, seq_number))
+
+        with open(self.dataset_location + '/results/set{:02d}/V{:03d}/I{:05d}.txt'.format(set_number, seq_number, frame_number), 'w') as file:
+            for row in range(guess_pos.shape[0]):
+                pos = guess_pos[row]
+                score = guess_scores[row]
+
+                file.write('{}, {}, {}, {}, {}\n'.format(pos[1], pos[0], pos[3], pos[2], score))
 
     def is_frame_prepared(self, set_number, seq_number, frame_number):
         return os.path.isfile(self.dataset_location + '/prepared/set{:02d}/V{:03d}.seq/{}.input.npy'.format(set_number, seq_number, frame_number)) and os.path.isfile(self.dataset_location + '/prepared/set{:02d}/V{:03d}.seq/{}.negative.npy'.format(set_number, seq_number, frame_number)) and os.path.isfile(self.dataset_location + '/prepared/set{:02d}/V{:03d}.seq/{}.positive.npy'.format(set_number, seq_number, frame_number)) and os.path.isfile(self.dataset_location + '/prepared/set{:02d}/V{:03d}.seq/{}.reg.npy'.format(set_number, seq_number, frame_number))
