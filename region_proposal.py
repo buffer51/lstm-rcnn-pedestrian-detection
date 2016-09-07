@@ -133,8 +133,8 @@ def trainer(caltech, input_placeholder, clas_placeholder, reg_placeholder):
 
     # Declare loss functions
     clas_loss = tf.nn.softmax_cross_entropy_with_logits(clas_rpn, clas_truth)
-    clas_positive_ratio = tf.Variable(25.0, trainable = False, name = 'clas_positive_ratio')
-    clas_loss = tf.reduce_sum((tf.mul(clas_loss, clas_examples) + (clas_positive_ratio - 1.0) * tf.mul(clas_loss, clas_positive_examples)) / clas_positive_ratio)
+    clas_positive_weight = tf.Variable(CaltechDataset.CLAS_POSITIVE_WEIGHT, trainable = False, name = 'clas_positive_weight')
+    clas_loss = tf.reduce_sum((tf.mul(clas_loss, clas_examples) + (clas_positive_weight - 1.0) * tf.mul(clas_loss, clas_positive_examples)) / clas_positive_weight)
     clas_loss = tf.div(clas_loss, tf.reduce_sum(clas_examples)) # Normalization
 
     reg_loss = tf.abs(tf.sub(reg_rpn, reg_truth))
@@ -144,7 +144,7 @@ def trainer(caltech, input_placeholder, clas_placeholder, reg_placeholder):
     reg_loss = tf.select(tf.less(reg_loss, 1), tf.mul(tf.square(reg_loss), 0.5), tf.sub(reg_loss, 0.5))
     reg_loss = tf.reduce_sum(reg_loss, reduction_indices = 1)
     reg_loss = tf.reduce_mean(tf.mul(reg_loss, clas_positive_examples))
-    lambda_ = tf.Variable(100.0, trainable = False, name = 'lambda') # Roughly reg_loss & clas_loss are equal, because 100.0 ~ 6000 (num total anchors) / 64 (minibatch size)
+    lambda_ = tf.Variable(CaltechDataset.LOSS_LAMBDA, trainable = False, name = 'lambda') # Roughly reg_loss & clas_loss are equal, because 100.0 ~ 6000 (num total anchors) / 64 (minibatch size)
     reg_loss = tf.mul(reg_loss, lambda_) # Scaling
 
     rpn_loss = tf.add(clas_loss, reg_loss)
@@ -266,11 +266,12 @@ if __name__ == '__main__':
                     # Reset for training accumulation
                     confusion_matrix = np.zeros((2, 2), dtype = np.int64)
 
-                    print('#### EPOCH {:02d} ####'.format(last_epoch))
+                    # Save the model to disk
+                    save_path = full_saver.save(sess, 'model.{}.ckpt'.format(caltech.epoch - 1))
+                    print('Model saved: {}'.format(save_path))
 
-            # Save the model to disk
-            save_path = full_saver.save(sess, 'current-model.ckpt')
-            print('Model saved in file: {}'.format(save_path))
+                    if caltech.epoch != CaltechDataset.MAX_EPOCHS:
+                        print('#### EPOCH {:02d} ####'.format(last_epoch))
 
         # Do one pass of the whole testing set
         print('Testing...')
@@ -282,9 +283,10 @@ if __name__ == '__main__':
 
             confusion_matrix = accumulate_confusion_matrix(confusion_matrix, results[0], results[1], results[2])
 
-            clas_guess, guess_pos, guess_scores = caltech.parse_results(results[2], results[3], results[4])
-            final_pos, final_scores = caltech.NMS(guess_pos, guess_scores)
-            caltech.save_results(minibatch_used[0], minibatch_used[1], minibatch_used[2], final_pos, final_scores)
+            if CaltechDataset.TESTING_SIZE == -1: # Save results only when doing full testing
+                clas_guess, guess_pos, guess_scores = caltech.parse_results(results[2], results[3], results[4])
+                final_pos, final_scores = caltech.NMS(guess_pos, guess_scores)
+                caltech.save_results(minibatch_used[0], minibatch_used[1], minibatch_used[2], final_pos, final_scores)
 
         results = sess.run(test_summaries, feed_dict = compute_test_stats(test_placeholders, confusion_matrix))
         test_writer.add_summary(results, global_step = tf.train.global_step(sess, global_step))

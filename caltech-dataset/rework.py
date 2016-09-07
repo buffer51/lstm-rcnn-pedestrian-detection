@@ -49,8 +49,6 @@ class CaltechDataset:
     TESTING_SIZE = 400 # Number of testing frames kept from all available
     FRAME_MODULO = 30 # Modulo for selecting frames from sequences in testing
 
-    MAX_EPOCHS = 4
-
     ### Parameters controlling how the classification is created ###
     MINIMUM_VISIBLE_RATIO = 0.5 # Minimum ratio of area visible for occluded objects to be included
     MINIMUM_WIDTH = 10 # Minimum width for objects to be included
@@ -58,18 +56,22 @@ class CaltechDataset:
     NEGATIVE_THRESHOLD = 0.3
     POSITIVE_THRESHOLD = 0.7
 
+    ### Parameters that control the learning ###
+    MAX_EPOCHS = 6
+    MINIBATCH_SIZE = 256 # Number of examples (positive, negative or neither) used per image as a minibatch
+    CLAS_POSITIVE_WEIGHT = 100.0 # Weight of positive example in the classification loss
+    # LOSS_LAMBDA = # Defined dynamically because it depends on the number of anchors
+
     ### Parameters controlling the final output ###
     NMS_IOU_THRESHOLD = 0.0
     NMS_TOP_N = 20 # Kept after NMS
-
-    ### Parameters controlling how examples are fed while training ###
-    MINIBATCH_SIZE = 64 # Number of examples (positive, negative or neither) used per image as a minibatch
 
     def __init__(self, dataset_location = 'caltech-dataset/dataset'):
         self.dataset_location = dataset_location
         self.annotations = None
 
         self.anchors = Anchors([30, 60, 100, 200, 350], [0.41])
+        CaltechDataset.LOSS_LAMBDA = float(CaltechDataset.OUTPUT_SIZE[0] * CaltechDataset.OUTPUT_SIZE[1] * self.anchors.num) / float(CaltechDataset.MINIBATCH_SIZE)
 
         self.epoch = 0
         self.training_minibatch = 0
