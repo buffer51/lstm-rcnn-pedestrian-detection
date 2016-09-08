@@ -58,8 +58,8 @@ class CaltechDataset:
 
     ### Parameters that control the learning ###
     MAX_EPOCHS = 6
-    MINIBATCH_SIZE = 256 # Number of examples (positive, negative or neither) used per image as a minibatch
-    CLAS_POSITIVE_WEIGHT = 100.0 # Weight of positive example in the classification loss
+    MINIBATCH_SIZE = 64 # Number of examples (positive, negative or neither) used per image as a minibatch
+    CLAS_POSITIVE_WEIGHT = 50.0 # Weight of positive example in the classification loss
     # LOSS_LAMBDA = # Defined dynamically because it depends on the number of anchors
 
     ### Parameters controlling the final output ###
