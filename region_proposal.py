@@ -209,14 +209,14 @@ if __name__ == '__main__':
 
     ### Create a saver/loader ###
     vgg_saver = tf.train.Saver(vgg.get_all_variables(), name = 'vgg_saver') # Restores VGG weights & biases
-    full_saver = tf.train.Saver(name = 'full_saver')
+    full_saver = tf.train.Saver(name = 'full_saver', max_to_keep = None)
 
     with tf.Session() as sess:
         # Initialize variables
         tf.initialize_all_variables().run()
 
         vgg_restore_path = 'vgg16/VGG16D.ckpt'
-        full_restore_path = None # 'models/2016-09-05-64minibatch-25posratio-norelu-withreg-400training/current-model.ckpt'
+        full_restore_path = None # 'models/2016-09-08-64minibatch-50posratio-norelu-withreg-4000training/model.11.ckpt'
 
         if full_restore_path:
             # Restore variables from disk.
