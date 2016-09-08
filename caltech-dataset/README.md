@@ -26,5 +26,5 @@ requires both **npm** and **NodeJS** (*v4* at least).
 
 To aggregate images from a sequence into a video, you can use **FFMPEG**:
 ```
-ffmpeg -framerate 30 -i img%03d.png -c:v libx264 -r 30 -pix_fmt yuv420p out.mp4
+ffmpeg -framerate 30 -i %d.jpg -c:v libx264 -r 30 -pix_fmt yuv420p out.mp4
 ```
