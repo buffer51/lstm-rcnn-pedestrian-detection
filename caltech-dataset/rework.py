@@ -25,10 +25,16 @@ def IoU_negative(anchor_box, truth_box):
     return max(intersect / (h1 * w1 + h2 * w2 - intersect), intersect / (h1 * w1))
 
 def transform_cropped_pos(pos, transform):
-    return (int(float(pos[0] - transform[0, 0]) * transform[1, 0]),
-            int(float(pos[1] - transform[0, 1]) * transform[1, 1]),
-            int(float(pos[2]) * transform[1, 0]),
-            int(float(pos[3]) * transform[1, 1]))
+    return (int(round(float(pos[0] - transform[0, 0]) * transform[1, 0])),
+            int(round(float(pos[1] - transform[0, 1]) * transform[1, 1])),
+            int(round(float(pos[2]) * transform[1, 0])),
+            int(round(float(pos[3]) * transform[1, 1])))
+
+def untransform_cropped_pos(pos, transform):
+    return (int(round((float(pos[0]) / transform[1, 0]) + transform[0, 0])),
+            int(round((float(pos[1]) / transform[1, 1]) + transform[0, 1])),
+            int(round(float(pos[2]) / transform[1, 0])),
+            int(round(float(pos[3]) / transform[1, 1])))
 
 class Anchors:
     def __init__(self, heights, width_to_height_ratios):
@@ -539,11 +545,14 @@ class CaltechDataset:
 
         image.show()
 
-    def show_results(self, set_number, seq_number, frame_number, clas_guess, guess_pos, guess_scores):
+    def show_results(self, set_number, seq_number, frame_number, clas_guess, guess_pos, guess_scores, original_image = False):
         self.load_annotations() # Will be needed
 
         if CaltechDataset.USE_CROPPING:
-            image = Image.open(self.dataset_location + '/images-cropped/set{:02d}/V{:03d}.seq/{}.jpg'.format(set_number, seq_number, frame_number))
+            if original_image:
+                image = Image.open(self.dataset_location + '/images/set{:02d}/V{:03d}.seq/{}.jpg'.format(set_number, seq_number, frame_number))
+            else:
+                image = Image.open(self.dataset_location + '/images-cropped/set{:02d}/V{:03d}.seq/{}.jpg'.format(set_number, seq_number, frame_number))
             transform = np.load(self.dataset_location + '/images-cropped/set{:02d}/V{:03d}.seq/{}.transform.npy'.format(set_number, seq_number, frame_number))
         else:
             image = Image.open(self.dataset_location + '/images/set{:02d}/V{:03d}.seq/{}.jpg'.format(set_number, seq_number, frame_number))
@@ -558,7 +567,7 @@ class CaltechDataset:
         if objects:
             for o in objects:
                 pos = (o['pos'][1], o['pos'][0], o['pos'][3], o['pos'][2]) # Convert to (y, x, h, w)
-                if CaltechDataset.USE_CROPPING:
+                if CaltechDataset.USE_CROPPING and not original_image:
                     pos = transform_cropped_pos(pos, transform)
 
                 if o['lbl'] in ['person']:
@@ -573,7 +582,7 @@ class CaltechDataset:
                             good = False
                         else:
                             visible_pos = (o['posv'][1], o['posv'][0], o['posv'][3], o['posv'][2]) # Convert to (y, x, h, w)
-                            if CaltechDataset.USE_CROPPING:
+                            if CaltechDataset.USE_CROPPING and not original_image:
                                 visible_pos = transform_cropped_pos(visible_pos, transform)
                             if visible_pos[2] * visible_pos[3] < CaltechDataset.MINIMUM_VISIBLE_RATIO * pos[2] * pos[3]:
                                 good = False
@@ -586,29 +595,37 @@ class CaltechDataset:
                 else:
                     dr.rectangle((pos[1], pos[0], pos[1] + pos[3], pos[0] + pos[2]), outline = 'black')
 
-        for y in range(clas_guess.shape[0]):
-            for x in range(clas_guess.shape[1]):
-                for anchor_id in range(clas_guess.shape[2]):
-                    if clas_guess[y, x, anchor_id] == 0.0: # Negative
-                        dr.rectangle((CaltechDataset.OUTPUT_CELL_SIZE * x, CaltechDataset.OUTPUT_CELL_SIZE * y, CaltechDataset.OUTPUT_CELL_SIZE * (x+1) - 1, CaltechDataset.OUTPUT_CELL_SIZE * (y+1) - 1), outline = 'red')
-                    else: # Positive
-                        dr.rectangle((CaltechDataset.OUTPUT_CELL_SIZE * x, CaltechDataset.OUTPUT_CELL_SIZE * y, CaltechDataset.OUTPUT_CELL_SIZE * (x+1) - 1, CaltechDataset.OUTPUT_CELL_SIZE * (y+1) - 1), outline = 'green')
+        if not original_image:
+            for y in range(clas_guess.shape[0]):
+                for x in range(clas_guess.shape[1]):
+                    for anchor_id in range(clas_guess.shape[2]):
+                        if clas_guess[y, x, anchor_id] == 0.0: # Negative
+                            dr.rectangle((CaltechDataset.OUTPUT_CELL_SIZE * x, CaltechDataset.OUTPUT_CELL_SIZE * y, CaltechDataset.OUTPUT_CELL_SIZE * (x+1) - 1, CaltechDataset.OUTPUT_CELL_SIZE * (y+1) - 1), outline = 'red')
+                        else: # Positive
+                            dr.rectangle((CaltechDataset.OUTPUT_CELL_SIZE * x, CaltechDataset.OUTPUT_CELL_SIZE * y, CaltechDataset.OUTPUT_CELL_SIZE * (x+1) - 1, CaltechDataset.OUTPUT_CELL_SIZE * (y+1) - 1), outline = 'green')
 
         for row in range(guess_pos.shape[0]):
             pos = guess_pos[row]
+            if CaltechDataset.USE_CROPPING and original_image:
+                pos = untransform_cropped_pos(pos, transform)
             dr.rectangle((pos[1], pos[0], pos[1] + pos[3], pos[0] + pos[2]), outline = 'green')
             dr.text((pos[1], pos[0]), '{:.3f}'.format(guess_scores[row]))
 
         image.show()
 
-    def save_results(self, set_number, seq_number, frame_number, guess_pos, guess_scores):
+    def save_results(self, set_number, seq_number, frame_number, guess_pos, guess_scores, original_image = False):
         # For saving
         if not os.path.isdir(self.dataset_location + '/results/set{:02d}/V{:03d}'.format(set_number, seq_number)):
             os.makedirs(self.dataset_location + '/results/set{:02d}/V{:03d}'.format(set_number, seq_number))
 
+        if CaltechDataset.USE_CROPPING and original_image:
+            transform = np.load(self.dataset_location + '/images-cropped/set{:02d}/V{:03d}.seq/{}.transform.npy'.format(set_number, seq_number, frame_number))
+
         with open(self.dataset_location + '/results/set{:02d}/V{:03d}/I{:05d}.txt'.format(set_number, seq_number, frame_number), 'w') as file:
             for row in range(guess_pos.shape[0]):
                 pos = guess_pos[row]
+                if CaltechDataset.USE_CROPPING and original_image:
+                    pos = untransform_cropped_pos(pos, transform)
                 score = guess_scores[row]
 
                 file.write('{}, {}, {}, {}, {}\n'.format(pos[1], pos[0], pos[3], pos[2], score))
