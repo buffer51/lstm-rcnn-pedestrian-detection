@@ -24,6 +24,12 @@ def IoU_negative(anchor_box, truth_box):
 
     return max(intersect / (h1 * w1 + h2 * w2 - intersect), intersect / (h1 * w1))
 
+def transform_cropped_pos(pos, transform):
+    return (int(float(pos[0] - transform[0, 0]) * transform[1, 0]),
+            int(float(pos[1] - transform[0, 1]) * transform[1, 1]),
+            int(float(pos[2]) * transform[1, 0]),
+            int(float(pos[3]) * transform[1, 1]))
+
 class Anchors:
     def __init__(self, heights, width_to_height_ratios):
         self.num = len(heights) * len(width_to_height_ratios)
@@ -57,7 +63,7 @@ class CaltechDataset:
     POSITIVE_THRESHOLD = 0.7
 
     ### Parameters that control the learning ###
-    MAX_EPOCHS = 6
+    MAX_EPOCHS = 10
     MINIBATCH_SIZE = 64 # Number of examples (positive, negative or neither) used per image as a minibatch
     CLAS_POSITIVE_WEIGHT = 50.0 # Weight of positive example in the classification loss
     # LOSS_LAMBDA = # Defined dynamically because it depends on the number of anchors
@@ -65,6 +71,10 @@ class CaltechDataset:
     ### Parameters controlling the final output ###
     NMS_IOU_THRESHOLD = 0.0
     NMS_TOP_N = 20 # Kept after NMS
+
+    ### Parameters controlling cropping of images ###
+    USE_CROPPING = True
+    CROPPING_THRESHOLD = 20
 
     def __init__(self, dataset_location = 'caltech-dataset/dataset'):
         self.dataset_location = dataset_location
@@ -340,7 +350,11 @@ class CaltechDataset:
         if not os.path.isdir(self.dataset_location + '/prepared/set{:02d}/V{:03d}.seq'.format(set_number, seq_number)):
             os.makedirs(self.dataset_location + '/prepared/set{:02d}/V{:03d}.seq'.format(set_number, seq_number))
 
-        image = Image.open(self.dataset_location + '/images/set{:02d}/V{:03d}.seq/{}.jpg'.format(set_number, seq_number, frame_number))
+        if CaltechDataset.USE_CROPPING:
+            image = Image.open(self.dataset_location + '/images-cropped/set{:02d}/V{:03d}.seq/{}.jpg'.format(set_number, seq_number, frame_number))
+            transform = np.load(self.dataset_location + '/images-cropped/set{:02d}/V{:03d}.seq/{}.transform.npy'.format(set_number, seq_number, frame_number))
+        else:
+            image = Image.open(self.dataset_location + '/images/set{:02d}/V{:03d}.seq/{}.jpg'.format(set_number, seq_number, frame_number))
 
         input_data = np.expand_dims(np.reshape(np.array(image.getdata(), dtype = np.uint8), [image.size[1], image.size[0], 3]), axis = 0) # [?, height, width, RGB]
         np.save(self.dataset_location + '/prepared/set{:02d}/V{:03d}.seq/{}.input.npy'.format(set_number, seq_number, frame_number), input_data)
@@ -357,6 +371,8 @@ class CaltechDataset:
             for o in objects:
                 good = False
                 pos = (o['pos'][1], o['pos'][0], o['pos'][3], o['pos'][2]) # Convert to (y, x, h, w)
+                if CaltechDataset.USE_CROPPING:
+                    pos = transform_cropped_pos(pos, transform)
 
                 if o['lbl'] in ['person']:
                     good = True
@@ -370,6 +386,8 @@ class CaltechDataset:
                             good = False
                         else:
                             visible_pos = (o['posv'][1], o['posv'][0], o['posv'][3], o['posv'][2]) # Convert to (y, x, h, w)
+                            if CaltechDataset.USE_CROPPING:
+                                visible_pos = transform_cropped_pos(visible_pos, transform)
                             if visible_pos[2] * visible_pos[3] < CaltechDataset.MINIMUM_VISIBLE_RATIO * pos[2] * pos[3]:
                                 good = False
                                 pos = visible_pos
@@ -463,7 +481,11 @@ class CaltechDataset:
         if not self.is_frame_prepared(set_number, seq_number, frame_number):
             self.prepare_frame(set_number, seq_number, frame_number)
 
-        image = Image.open(self.dataset_location + '/images/set{:02d}/V{:03d}.seq/{}.jpg'.format(set_number, seq_number, frame_number))
+        if CaltechDataset.USE_CROPPING:
+            image = Image.open(self.dataset_location + '/images-cropped/set{:02d}/V{:03d}.seq/{}.jpg'.format(set_number, seq_number, frame_number))
+            transform = np.load(self.dataset_location + '/images-cropped/set{:02d}/V{:03d}.seq/{}.transform.npy'.format(set_number, seq_number, frame_number))
+        else:
+            image = Image.open(self.dataset_location + '/images/set{:02d}/V{:03d}.seq/{}.jpg'.format(set_number, seq_number, frame_number))
         dr = ImageDraw.Draw(image)
 
         # Retrieve objects for that frame in annotations
@@ -475,6 +497,8 @@ class CaltechDataset:
         if objects:
             for o in objects:
                 pos = (o['pos'][1], o['pos'][0], o['pos'][3], o['pos'][2]) # Convert to (y, x, h, w)
+                if CaltechDataset.USE_CROPPING:
+                    pos = transform_cropped_pos(pos, transform)
 
                 if o['lbl'] in ['person']:
                     good = True
@@ -488,6 +512,8 @@ class CaltechDataset:
                             good = False
                         else:
                             visible_pos = (o['posv'][1], o['posv'][0], o['posv'][3], o['posv'][2]) # Convert to (y, x, h, w)
+                            if CaltechDataset.USE_CROPPING:
+                                visible_pos = transform_cropped_pos(visible_pos, transform)
                             if visible_pos[2] * visible_pos[3] < CaltechDataset.MINIMUM_VISIBLE_RATIO * pos[2] * pos[3]:
                                 good = False
                                 pos = visible_pos
@@ -513,10 +539,14 @@ class CaltechDataset:
 
         image.show()
 
-    def show_results(self, set_number, seq_number, frame_number, clas_guess, guess_pos):
+    def show_results(self, set_number, seq_number, frame_number, clas_guess, guess_pos, guess_scores):
         self.load_annotations() # Will be needed
 
-        image = Image.open(self.dataset_location + '/images/set{:02d}/V{:03d}.seq/{}.jpg'.format(set_number, seq_number, frame_number))
+        if CaltechDataset.USE_CROPPING:
+            image = Image.open(self.dataset_location + '/images-cropped/set{:02d}/V{:03d}.seq/{}.jpg'.format(set_number, seq_number, frame_number))
+            transform = np.load(self.dataset_location + '/images-cropped/set{:02d}/V{:03d}.seq/{}.transform.npy'.format(set_number, seq_number, frame_number))
+        else:
+            image = Image.open(self.dataset_location + '/images/set{:02d}/V{:03d}.seq/{}.jpg'.format(set_number, seq_number, frame_number))
         dr = ImageDraw.Draw(image)
 
         # Retrieve objects for that frame in annotations
@@ -528,6 +558,8 @@ class CaltechDataset:
         if objects:
             for o in objects:
                 pos = (o['pos'][1], o['pos'][0], o['pos'][3], o['pos'][2]) # Convert to (y, x, h, w)
+                if CaltechDataset.USE_CROPPING:
+                    pos = transform_cropped_pos(pos, transform)
 
                 if o['lbl'] in ['person']:
                     good = True
@@ -541,6 +573,8 @@ class CaltechDataset:
                             good = False
                         else:
                             visible_pos = (o['posv'][1], o['posv'][0], o['posv'][3], o['posv'][2]) # Convert to (y, x, h, w)
+                            if CaltechDataset.USE_CROPPING:
+                                visible_pos = transform_cropped_pos(visible_pos, transform)
                             if visible_pos[2] * visible_pos[3] < CaltechDataset.MINIMUM_VISIBLE_RATIO * pos[2] * pos[3]:
                                 good = False
                                 pos = visible_pos
@@ -563,6 +597,7 @@ class CaltechDataset:
         for row in range(guess_pos.shape[0]):
             pos = guess_pos[row]
             dr.rectangle((pos[1], pos[0], pos[1] + pos[3], pos[0] + pos[2]), outline = 'green')
+            dr.text((pos[1], pos[0]), '{:.3f}'.format(guess_scores[row]))
 
         image.show()
 
@@ -589,7 +624,55 @@ class CaltechDataset:
 
         return input_data, clas_negative, clas_positive, reg_positive
 
+    def crop_frame(self, set_number, seq_number, frame_number):
+        self.load_annotations() # Will be needed
+
+        # For saving
+        if not os.path.isdir(self.dataset_location + '/images-cropped/set{:02d}/V{:03d}.seq'.format(set_number, seq_number)):
+            os.makedirs(self.dataset_location + '/images-cropped/set{:02d}/V{:03d}.seq'.format(set_number, seq_number))
+
+        image = Image.open(self.dataset_location + '/images/set{:02d}/V{:03d}.seq/{}.jpg'.format(set_number, seq_number, frame_number))
+
+        image_data = np.reshape(np.array(image.getdata(), dtype = np.uint8), [image.size[1], image.size[0], 3])
+        greyscale_data = np.mean(image_data, axis = 2)
+
+        y_data = np.mean(greyscale_data, axis = 1)
+        ys = y_data >= CaltechDataset.CROPPING_THRESHOLD
+
+        x_data = np.mean(greyscale_data, axis = 0)
+        xs = x_data >= CaltechDataset.CROPPING_THRESHOLD
+
+        cropped_data = image_data[ys, :]
+        cropped_data = cropped_data[:, xs]
+
+        cropped_image = Image.fromarray(cropped_data)
+        cropped_image = cropped_image.resize(image.size)
+        cropped_image.save(self.dataset_location + '/images-cropped/set{:02d}/V{:03d}.seq/{}.jpg'.format(set_number, seq_number, frame_number))
+
+        dy = 0
+        if not ys[0]:
+            while not ys[dy]:
+                dy += 1
+        dx = 0
+        if not xs[0]:
+            while not xs[dx]:
+                dx += 1
+        delta = (dy, dx)
+
+        scale = (float(image.size[1]) / float(ys.sum()), float(image.size[0]) / float(xs.sum()))
+
+        transform = np.array([delta, scale], dtype = np.float32)
+        np.save(self.dataset_location + '/images-cropped/set{:02d}/V{:03d}.seq/{}.transform.npy'.format(set_number, seq_number, frame_number), transform)
+
+    def is_frame_cropped(self, set_number, seq_number, frame_number):
+        return os.path.isfile(self.dataset_location + '/images-cropped/set{:02d}/V{:03d}.seq/{}.jpg'.format(set_number, seq_number, frame_number)) and os.path.isfile(self.dataset_location + '/images-cropped/set{:02d}/V{:03d}.seq/{}.transform.npy'.format(set_number, seq_number, frame_number))
+
     def prepare(self):
+        if CaltechDataset.USE_CROPPING:
+            for minibatch in self.training + self.validation + self.testing:
+                if not self.is_frame_cropped(*minibatch):
+                    self.crop_frame(*minibatch)
+
         for minibatch in self.training + self.validation + self.testing:
             if not self.is_frame_prepared(*minibatch):
                 self.prepare_frame(*minibatch)
