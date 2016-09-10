@@ -161,10 +161,10 @@ def trainer(caltech, input_placeholder, clas_placeholder, reg_placeholder):
 
     global_step = tf.Variable(0, trainable = False, name = 'global_step')
     learning_rate = tf.train.exponential_decay(
-        0.001,               # Base learning rate.
-        global_step,        # Current index into the dataset.
-        1000,               # Decay step.
-        0.95,               # Decay rate.
+        0.001,                  # Base learning rate.
+        global_step,            # Current index into the dataset.
+        len(caltech.training),  # Decay step.
+        0.95,                   # Decay rate.
         staircase = True)
 
     # Use simple momentum for the optimization.
@@ -277,6 +277,9 @@ if __name__ == '__main__':
         print('Testing...')
         confusion_matrix = np.zeros((2, 2), dtype = np.int64)
         last_frame = False
+        global_matched_scores = np.zeros([0])
+        global_default = np.array([0, 0])
+
         while not last_frame:
             feed_dict, minibatch_used, last_frame = caltech.get_testing_minibatch(input_placeholder, clas_placeholder, reg_placeholder)
             results = sess.run(test_steps, feed_dict = feed_dict)
@@ -287,6 +290,9 @@ if __name__ == '__main__':
             # caltech.show_results(minibatch_used[0], minibatch_used[1], minibatch_used[2], clas_guess, guess_pos, guess_scores, original_image = True)
             # final_pos, final_scores = caltech.NMS(guess_pos, guess_scores)
             # caltech.show_results(minibatch_used[0], minibatch_used[1], minibatch_used[2], clas_guess, final_pos, final_scores, original_image = True)
+            # matched_scores, default = caltech.compute_matches(minibatch_used[0], minibatch_used[1], minibatch_used[2], final_pos, final_scores, original_image = True, display_image = True)
+            # global_matched_scores = np.append(global_matched_scores, matched_scores)
+            # global_default += default
             # if caltech.testing_minibatch == 1:
             #     exit(1)
 

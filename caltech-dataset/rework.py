@@ -14,15 +14,13 @@ def IoU(anchor_box, truth_box):
 
     return intersect / (h1 * w1 + h2 * w2 - intersect)
 
-def IoU_negative(anchor_box, truth_box):
-    # We return the max of two different quantity:
-    # IoU, and Intersection over the anchor area
+def IoA(anchor_box, truth_box): # Intersection over Area (of first parameter)
     (y1, x1, h1, w1) = anchor_box
     (y2, x2, h2, w2) = truth_box
 
     intersect = max(0.0, min(y1+h1-1, y2+h2-1) - max(y1, y2)) * max(0.0, min(x1+w1-1, x2+w2-1) - max(x1, x2))
 
-    return max(intersect / (h1 * w1 + h2 * w2 - intersect), intersect / (h1 * w1))
+    return intersect / (h1 * w1)
 
 def transform_cropped_pos(pos, transform):
     return (int(round(float(pos[0] - transform[0, 0]) * transform[1, 0])),
@@ -429,10 +427,8 @@ class CaltechDataset:
                     maxIoU = 0.0
                     for i in range(persons.shape[0]):
                         IoUs[y, x, anchor_id, i] = IoU(pos, persons[i])
-                        # IoUs_negatives[y, x, anchor_id, i] = IoU_negative(pos, persons[i])
                         IoUs_negatives[y, x, anchor_id, i] = IoU(pos, persons[i])
                     for i in range(undesirables.shape[0]):
-                        # IoUs_negatives[y, x, anchor_id, persons.shape[0] + i] = IoU_negative(pos, undesirables[i])
                         IoUs_negatives[y, x, anchor_id, persons.shape[0] + i] = IoU(pos, undesirables[i])
 
         clas_data = np.zeros((CaltechDataset.OUTPUT_SIZE[0], CaltechDataset.OUTPUT_SIZE[1], self.anchors.num, 2), dtype = np.uint8) # [height, width, # anchors, 2]
@@ -595,7 +591,7 @@ class CaltechDataset:
                 else:
                     dr.rectangle((pos[1], pos[0], pos[1] + pos[3], pos[0] + pos[2]), outline = 'black')
 
-        if not original_image:
+        if not CaltechDataset.USE_CROPPING or not original_image:
             for y in range(clas_guess.shape[0]):
                 for x in range(clas_guess.shape[1]):
                     for anchor_id in range(clas_guess.shape[2]):
@@ -629,6 +625,114 @@ class CaltechDataset:
                 score = guess_scores[row]
 
                 file.write('{}, {}, {}, {}, {}\n'.format(pos[1], pos[0], pos[3], pos[2], score))
+
+    def compute_matches(self, set_number, seq_number, frame_number, guess_pos, guess_scores, original_image = False, display_image = False):
+        self.load_annotations() # Will be needed
+
+        if CaltechDataset.USE_CROPPING:
+            if display_image:
+                if original_image:
+                    image = Image.open(self.dataset_location + '/images/set{:02d}/V{:03d}.seq/{}.jpg'.format(set_number, seq_number, frame_number))
+                else:
+                    image = Image.open(self.dataset_location + '/images-cropped/set{:02d}/V{:03d}.seq/{}.jpg'.format(set_number, seq_number, frame_number))
+            transform = np.load(self.dataset_location + '/images-cropped/set{:02d}/V{:03d}.seq/{}.transform.npy'.format(set_number, seq_number, frame_number))
+        elif display_image:
+            image = Image.open(self.dataset_location + '/images/set{:02d}/V{:03d}.seq/{}.jpg'.format(set_number, seq_number, frame_number))
+
+        if display_image:
+            dr = ImageDraw.Draw(image)
+
+        # Retrieve objects for that frame in annotations
+        try:
+            objects = self.annotations['set{:02d}'.format(set_number)]['V{:03d}'.format(seq_number)]['frames']['{}'.format(frame_number)]
+        except KeyError as e:
+            objects = None # Simply no objects for that frame
+
+        # We attempt to mimic the reasonable test set
+        # i.e. 50 pixels or taller, no occlusion (not even partial)
+        persons = []
+        undesirables = []
+        if objects:
+            for o in objects:
+                good = False
+                pos = (o['pos'][1], o['pos'][0], o['pos'][3], o['pos'][2]) # Convert to (y, x, h, w)
+                if CaltechDataset.USE_CROPPING and not original_image:
+                    pos = transform_cropped_pos(pos, transform)
+
+                if o['lbl'] in ['person']:
+                    good = True
+
+                    # 50 pixels or taller
+                    if pos[2] < 50:
+                        good = False
+
+                    if o['occl'] == 1:
+                        good = False
+
+                if good:
+                    persons.append(pos)
+                    if display_image:
+                        dr.rectangle((pos[1], pos[0], pos[1] + pos[3], pos[0] + pos[2]), outline = 'blue')
+                else:
+                    undesirables.append(pos)
+                    if display_image:
+                        dr.rectangle((pos[1], pos[0], pos[1] + pos[3], pos[0] + pos[2]), outline = 'pink')
+
+        # Move data to numpy
+        persons = np.array(persons, dtype = np.float32)
+        undesirables = np.array(undesirables, dtype = np.float32)
+
+        # Sort guesses
+        index = np.argsort(guess_scores[:])[::-1] # Decreasing order with [::-1]
+        guess_pos = guess_pos[index]
+        guess_scores = guess_scores[index]
+
+        default_false_positives = 0
+        guess_matched = np.zeros(guess_scores.shape, dtype = np.bool)
+
+        for row in range(guess_pos.shape[0]):
+            pos = guess_pos[row]
+            if CaltechDataset.USE_CROPPING and original_image:
+                pos = untransform_cropped_pos(pos, transform)
+
+            # Try matching
+            matched = False
+            if persons.shape[0] > 0:
+                for r in range(persons.shape[0]):
+                    if IoU(pos, persons[r]) > 0.5:
+                        matched = True
+                        persons = np.delete(persons, r, 0)
+                        break
+
+            if matched:
+                guess_matched[row] = True
+                if display_image:
+                    dr.rectangle((pos[1], pos[0], pos[1] + pos[3], pos[0] + pos[2]), outline = 'green')
+            else:
+                if undesirables.shape[0] > 0:
+                    for r in range(undesirables.shape[0]):
+                        if IoA(pos, undesirables[r]) > 0.5:
+                            matched = True
+                            break
+
+                if not matched:
+                    default_false_positives += 1
+                    if display_image:
+                        dr.rectangle((pos[1], pos[0], pos[1] + pos[3], pos[0] + pos[2]), outline = 'red')
+                elif display_image:
+                    dr.rectangle((pos[1], pos[0], pos[1] + pos[3], pos[0] + pos[2]), outline = 'yellow')
+
+            if display_image:
+                dr.text((pos[1], pos[0]), '{:.3f}'.format(guess_scores[row]))
+
+        # Sorted scores of all matches made for computing curves
+        matched_scores = guess_scores[guess_matched]
+        default = np.array([default_false_positives, persons.shape[0]])
+
+        if display_image:
+            image.show()
+
+        return matched_scores, default
 
     def is_frame_prepared(self, set_number, seq_number, frame_number):
         return os.path.isfile(self.dataset_location + '/prepared/set{:02d}/V{:03d}.seq/{}.input.npy'.format(set_number, seq_number, frame_number)) and os.path.isfile(self.dataset_location + '/prepared/set{:02d}/V{:03d}.seq/{}.negative.npy'.format(set_number, seq_number, frame_number)) and os.path.isfile(self.dataset_location + '/prepared/set{:02d}/V{:03d}.seq/{}.positive.npy'.format(set_number, seq_number, frame_number)) and os.path.isfile(self.dataset_location + '/prepared/set{:02d}/V{:03d}.seq/{}.reg.npy'.format(set_number, seq_number, frame_number))
