@@ -216,7 +216,7 @@ if __name__ == '__main__':
         tf.initialize_all_variables().run()
 
         vgg_restore_path = 'vgg16/VGG16D.ckpt'
-        full_restore_path = None # 'models/2016-09-09-64minibatch-50posratio-norelu-withreg-4000training-cropped/model.9.ckpt'
+        full_restore_path = None # '2016-09-13-64minibatch-1posratio-norelu-withreg-4000training-cropped-undesirables-mul2reg/model.14.ckpt'
 
         if full_restore_path:
             # Restore variables from disk.
@@ -285,16 +285,6 @@ if __name__ == '__main__':
             results = sess.run(test_steps, feed_dict = feed_dict)
 
             confusion_matrix = accumulate_confusion_matrix(confusion_matrix, results[0], results[1], results[2])
-
-            # clas_guess, guess_pos, guess_scores = caltech.parse_results(results[2], results[3], results[4])
-            # caltech.show_results(minibatch_used[0], minibatch_used[1], minibatch_used[2], clas_guess, guess_pos, guess_scores, original_image = True)
-            # final_pos, final_scores = caltech.NMS(guess_pos, guess_scores)
-            # caltech.show_results(minibatch_used[0], minibatch_used[1], minibatch_used[2], clas_guess, final_pos, final_scores, original_image = True)
-            # matched_scores, default = caltech.compute_matches(minibatch_used[0], minibatch_used[1], minibatch_used[2], final_pos, final_scores, original_image = True, display_image = True)
-            # global_matched_scores = np.append(global_matched_scores, matched_scores)
-            # global_default += default
-            # if caltech.testing_minibatch == 1:
-            #     exit(1)
 
             if CaltechDataset.TESTING_SIZE == -1: # Save results only when doing full testing
                 clas_guess, guess_pos, guess_scores = caltech.parse_results(results[2], results[3], results[4])

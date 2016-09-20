@@ -62,14 +62,14 @@ class CaltechDataset:
     ### Parameters controlling how the classification is created ###
     MINIMUM_VISIBLE_RATIO = 0.5 # Minimum ratio of area visible for occluded objects to be included
     MINIMUM_WIDTH = 10 # Minimum width for objects to be included
-    USE_UNDESIRABLES = False # If set to true, anchors within undesirable objects (crowds, occluded pedestrians, ...) are set to be neither positive nor negative
+    USE_UNDESIRABLES = True # If set to true, anchors within undesirable objects (crowds, occluded pedestrians, ...) are set to be neither positive nor negative
     NEGATIVE_THRESHOLD = 0.3
     POSITIVE_THRESHOLD = 0.7
 
     ### Parameters that control the learning ###
-    MAX_EPOCHS = 10
+    MAX_EPOCHS = 15
     MINIBATCH_SIZE = 64 # Number of examples (positive, negative or neither) used per image as a minibatch
-    CLAS_POSITIVE_WEIGHT = 50.0 # Weight of positive example in the classification loss
+    CLAS_POSITIVE_WEIGHT = 1.0 # Weight of positive example in the classification loss
     # LOSS_LAMBDA = # Defined dynamically because it depends on the number of anchors
 
     ### Parameters controlling the final output ###
@@ -85,7 +85,7 @@ class CaltechDataset:
         self.annotations = None
 
         self.anchors = Anchors([30, 60, 100, 200, 350], [0.41])
-        CaltechDataset.LOSS_LAMBDA = float(CaltechDataset.OUTPUT_SIZE[0] * CaltechDataset.OUTPUT_SIZE[1] * self.anchors.num) / float(CaltechDataset.MINIBATCH_SIZE)
+        CaltechDataset.LOSS_LAMBDA = 2 * float(CaltechDataset.OUTPUT_SIZE[0] * CaltechDataset.OUTPUT_SIZE[1] * self.anchors.num) / float(CaltechDataset.MINIBATCH_SIZE)
 
         self.epoch = 0
         self.training_minibatch = 0
