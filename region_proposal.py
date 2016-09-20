@@ -6,7 +6,7 @@ import numpy as np
 import tensorflow as tf
 
 sys.path.append('caltech-dataset')
-from rework import CaltechDataset
+from caltech import CaltechDataset
 
 sys.path.append('vgg16')
 from vgg16 import VGG16D
